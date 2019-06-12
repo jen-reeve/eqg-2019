@@ -1,0 +1,12 @@
+Run in batch mode = no
+Input file name = all_females_2pops.txt
+Trait names included in file = yes
+Number of traits = 6
+Output file name = cpc.out
+Number of randomization runs = 1000
+Random number seed = 1996
+Create files for likelihood distributions = yes
+Type of analysis = 7 (Parent-off regression w/full-sib ANOVA)
+Only use families with complete data = yes
+Bend non-positive definite matrices = yes
+Automatically order eigenvectors in PCP analysis = yes

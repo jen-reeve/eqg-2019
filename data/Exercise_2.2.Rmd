@@ -1,0 +1,331 @@
+
+**Computational Exercise 2.2: Estimating and plotting a selection surface**
+**Copyright Stevan J. Arnold & Monique N. Simon 2019**
+
+**Step 1 Get your data into R**
+#Save the file Radix5_2012.txt to your desktop or folder of choice
+#In the following example, we have created a folder called R_wd and placed the data file in it
+#Set your working directory using a statement comparable to this one
+#Be sure and use the / not the \ spacing convention!
+#If you have not already,iInstall the package called 'plyr'
+#Use the Packages tab in the lower right corner
+
+```{r}
+setwd('C:/Documents and Settings/arnolds/Desktop/R wd')
+
+#Now read in your data
+thamnophis = read.table('Radix5_2012.txt',header=TRUE)
+#Attach the data frame to the local environment
+attach(thamnophis)
+#Print out the data frame to make sure it looks OK
+thamnophis
+```
+
+**Step 2  Estimating the selection gradients**
+#Use the following statements to create standardized versions of BODY, TAIL, and TIME
+#We want to standardize BODY and TAIL so that their means are zero and their sds are 1
+#We want to standardize SPEED so that it's mean is 1
+#These standardizations will simplify the interpretations of the coefficients that we will estimate
+
+```{r}
+new.body=(BODY-mean(BODY))/sd(BODY)
+new.tail=(TAIL-mean(TAIL))/sd(TAIL)
+new.speed=SPEED/mean(SPEED)
+
+#Do these transformations achieve the right means and standard deviations for the new variables?
+#Find out by using statements like mean(new.body), sd(new.body).
+```
+
+**Step 3  Let us begin by fitting a plane to the transformed data**
+  
+  
+```{r}  
+model <-lm(new.speed~new.body + new.tail)
+#print out the coefficients and statistics of the fit
+#this output will give us our best estimates of the directional selection gradients for 
+#new.body and new.tail
+summary(model)
+```
+#Which column represents the linear selection gradients?
+
+**Step 4 Now, fit a full quadratic model to the data**
+#Remember to use the factor of 0.5 for the stabilizing selection gradients
+#This model will give us estimates of the nonlinear selection gradients, gamma
+#First, create a new variable called prod which is the product of new.body and new.tail
+```{r}
+prod = new.body*new.tail
+#Then fit the quadratic model
+model <- lm(new.speed ~ new.body + new.tail + I(0.5*new.body^2) + I(0.5*new.tail^2) + prod )
+summary(model)
+```
+#Up to this point, using z1 for body and z2 for tail,
+#we have estimated beta from the linear fit and gamma from the quadratic fit, so that we have
+```{r}
+beta1= 0.031408  
+beta2= 0.001504
+gamma11 = -0.010578
+gamma22 = -0.005914
+gamma12 =  0.079017
+```
+#Because of our standardization, beta1 tells us that if we increase the value of new.body by 1 sd, 
+#we will increase new.speed by 3.1%
+
+**Step 5 Plotting the selection surface, an ISS**
+#Use the parameters for a full quadratic fitness surface for two traits
+
+```{r}
+z1 = new.body
+z2 = new.tail
+#Set the value for the intercept of the surface when z1=z2=0
+alpha=1
+#Define a function called fit that will compute the value of fitness as a function of z1 and z2
+fit <-  function(z1,z2, alpha, beta1, beta2, gamma11, gamma22, gamma12)  alpha + (beta1*z1) + (beta2*z2) + (gamma11*0.5*(z1^2)) + (gamma22*0.5*(z2^2)) + (gamma12*(z1 * z2)) 
+#Define a series of values for z1 and z2 that will be used to compute the value of relative fitness on the surface
+x <- seq(-2, 2, length = 30)
+y <- seq(-2, 2, length = 30)
+
+# Compute the surface values of relative fitness using the x-y grid of values for z1 and 
+# z2 for later use by the surface plotting function called persp
+#We could use the fit function to compute values of fitness but instead we will use a #function, called outer, that is more compatible with persp
+# The function outer has some specific requirements so we oblige by writing our fitness 
+# function in the following form
+
+z <- outer(x, y, function(a, b, alpha, beta1, beta2, gamma11, gamma22, gamma12) 1 + (0.031408*a) + (0.001504*b) + (-0.010578 *0.5*(a^2)) + (-0.005914 *0.5*(b^2)) + ( 0.079017 *(a * b)))
+
+#Define two variables that give the number of rows and cols in z
+nrz <- nrow(z)
+ncz <- ncol(z)
+
+# Create a function interpolating colors in the range of specified colors
+jet.colors <- colorRampPalette( c("yellow", "orange") )
+
+# Generate the desired number of colors from this palette
+nbcol <- 100
+color <- jet.colors(nbcol)
+
+# Compute the z-value at the facet centres
+zfacet <- z[-1, -1] + z[-1, -ncz] + z[-nrz, -1] + z[-nrz, -ncz]
+
+# Recode facet z-values into color indices
+facetcol <- cut(zfacet, nbcol)
+
+#Finally, plot the ISS
+par(bg = "white")
+persp(x, y, z, col=color[facetcol], xlab="Number of body vertebrae", ylab="Number tail vertebrae", zlab="Crawling speed",phi=30, theta=-30)
+```
+#We have plotted crawling speed performance surface for the body and tail vertebral counts
+
+**Step 6 Plot the eigenvectors on the surface
+#For another view of the surface, do a simple contour plot
+#Then draw the eigenvectors on that contour plot
+
+```{r}
+par(pty ="s")
+contour(x, y, z,lwd=2, labcex=1.5,xlab="Number of body vertebrae", ylab="Number tail vertebrae")
+```
+#What is the shape of this performance surface? It will help to add the eigenvectors of the gamma-matrix to the plot
+
+#Do, we redo the contour plot and add the eigenvectors of the gamma-matrix
+```{r}
+par(pty ="s")
+contour(x, y, z,lwd=2, labcex=1.5,xlab="Number of body vertebrae", ylab="Number tail vertebrae")
+
+#To add the eigenvectors, first, define the matrix. 
+gamma = matrix(c(gamma11, gamma12, gamma12, gamma22), nrow=2, ncol=2)
+gamma
+eigen(gamma)
+#Next, setup the beta vector and check to see if its values are correct
+beta = matrix(c(beta1, beta2), nrow=2, ncol=1)
+beta
+#Using gamma and beta, we can solve for the stationary point on the surface using
+#expression(11) from Phillips & Arnold 1989
+z.zero = -(solve(gamma)) %*% beta
+#Plot the stationary point on the surface
+points(z.zero[1,1], z.zero[2,1],pch=8,col='red',cex=2)
+#Finally, plot the eigenvectors on the surface
+#First plot the first eigenvector
+delx1 = z.zero[1]  + 6*eigen(gamma)$vectors[1,1]
+delx2 = z.zero[2]  + 6*eigen(gamma)$vectors[2,1]
+delx11 = z.zero[1]  - 6*eigen(gamma)$vectors[1,1]
+delx22 = z.zero[2]  - 6*eigen(gamma)$vectors[2,1]
+x.values=c (delx1, z.zero[1], delx11)
+y.values=c(delx2, z.zero[2], delx22)
+lines(x.values, y.values, lty=2, lwd=2,col='red')
+#then plot the other
+delx1 = z.zero[1] + 6*eigen(gamma)$vectors[1,2]
+delx2 = z.zero[2] + 6*eigen(gamma)$vectors[2,2]
+delx11 =  z.zero[1] - 6*eigen(gamma)$vectors[1,2]
+delx22 =  z.zero[2]  - 6*eigen(gamma)$vectors[2,2]
+x.values=c(delx1, z.zero[1], delx11)
+y.values=c(delx2, z.zero[2], delx22)
+lines(x.values, y.values, lty=2,lwd=2,col='red')
+```
+#Which of these eigenvectors is gamma max?
+
+#Now, estimate the omega-matrix (which we encountered in the notes), approximating it as the negative inverse of the gamma-matrix
+```{r}
+omega=-(solve(gamma))
+omega
+#Its eigenvectors should be opposite those of the gamma matrix.
+#Lets check
+eigen(omega)
+#What is the interpretation of the eigenvalues on the contour plot?
+```
+#Scroll up to see - for comparison - the eigen vectors of gamma
+
+**Step 7 Build a loop that will show the surface plot while bootstrapping 
+#Here is an example of script that does that!
+#Why would we want to bootstrap the surface?
+#We begin by writing a function that we will use during bootstrapping to estimate the coefficients that describe the surface for a particular boot sample
+
+
+```{r}
+est.coeff=function(y,x1,x2){
+  prod=x1*x2
+  m1=lm(y~x1+x2)
+  m2=lm(y~x1+x2+I(0.5*x1^2)+I(0.5*x2^2)+prod)
+  c(m1$coeff[2],m1$coeff[3],m2$coeff[4],m2$coeff[5],m2$coeff[6])
+}
+
+##Next, we program a perspective plot function
+x <- seq(-2, 2, length = 30)
+y <- seq(-2, 2, length = 30)
+# Compute the surface values of relative fitness using the x-y grid of values for z1 and 
+# z2 for later use by the surface plotting function called persp
+#We could use the fit function to compute values of fitness but instead we will use a #function, called outer, that is more compatible with persp
+# The function outer has some specific requirements so we oblige by writing our fitness function in the following form
+##Write a function that plots the perspective plot for each bootstrap
+persp.boot=function(b1,b2,y1,y2,y12,x=seq(-10,10,length=30),y=seq(-10,10,length=30)){
+  z <- outer(x, y, function(a, b, alpha, beta1, beta2, gamma11, gamma22, gamma12) 1 + ( b1*a) + (b2*b) + (y1*0.5*(a^2)) + (y2*0.5*(b^2)) + (y12*(a * b)))
+  nrz <- nrow(z)
+  ncz <- ncol(z)
+  jet.colors <- colorRampPalette( c("yellow", "orange") )
+  nbcol <- 100
+  color <- jet.colors(nbcol)
+  zfacet <- z[-1, -1] + z[-1, -ncz] + z[-nrz, -1] + z[-nrz, -ncz]
+  facetcol <- cut(zfacet, nbcol)
+  par(bg = "white")
+  persp(x, y, z, xlab="Number of body vertebrae", ylab="No. tail vertebrae", zlab="Crawling speed", col=color[facetcol],phi=30,theta=-30)
+}
+
+##Test it out
+persp.boot(-2,2,1,1,1)
+```
+##Bootstrap over individuals
+#Copy the following script - from the next line to the next comment - and paste it into the Console
+boot <- function(performance,trait1,trait2)
+{
+  par(ask=FALSE)
+  n=length(trait1)
+  gamma.boot <- list()
+  library(plyr)
+  for (i in 1:100){
+    samp=sample(1:n,n,replace=TRUE) #resampling individuals with replacment
+    boot.speed =performance[samp]
+    boot.body =trait1[samp]
+    boot.tail =trait2[samp]
+    boot.coeff =est.coeff(boot.speed ,boot.body ,boot.tail )
+
+    gamma.boot[[i]] = matrix(c(boot.coeff [3], boot.coeff [5], boot.coeff [5], boot.coeff [4]), nrow=2, ncol=2)
+   
+    eigenvalue1.boot = laply(gamma.boot, function(x) eigen(x)$value[1])
+    eigenvalue2.boot = laply(gamma.boot, function(x) eigen(x)$value[2])
+    
+    persp.boot(boot.coeff[1],boot.coeff[2],boot.coeff[3],boot.coeff[4],boot.coeff[5],x=seq(-10,10,length=10),y=seq(-10,10,length=10))
+    Sys.sleep(0.1)
+  }
+  return(list('egv1.boot'= eigenvalue1.boot, 'egv2.boot' = eigenvalue2.boot))
+}
+
+boot.results <- boot(new.speed,new.body,new.tail)
+
+#What is your visual impression of the performance surface based on this bootstrapping exercise?
+
+**Step 8 Plot the eigenvalue distributions for all the bootstraped gammas**
+#Why do we want to look at the eigenvalue distributions?
+
+#First, the distribution of the leading eigenvalue
+```{r}
+#par(mfrow=c(1,1))
+hist(boot.results$egv1.boot,main='Bootstrap of selection surface',xlab='Eigenvalue 1 of the gamma matrix')
+x.values =  c(0.0,0.0)
+y.values = c(0,50)
+lines(x.values, y.values, lty = 2, lwd=2)
+```
+#What can we conclude about the surface shape along this dimension?
+
+#Next, the distribution of the 2nd eigenvalue
+```{r}
+hist(boot.results$egv2.boot,main='Bootstrap of selection surface',xlab='Eigenvalue 2 of the gamma matrix')
+#Need to pause here before next plot
+x.values =  c(0.0,0.0)
+y.values = c(0,50)
+lines(x.values, y.values, lty = 2, lwd=2)
+par(mfrow=c(1,1))
+```
+#What is the shape along this dimension?
+
+**Step 9 Compare our sampling error distribution of the eigenvalues with a random distribution of eigenvalues
+#Why would we want to do that?
+#To compute the random distribution, we will reshuffle relative speed across individuals using a function we will call perm
+#Copy the script below and paste it into the Console
+
+perm <- function(performance,trait1,trait2)
+{
+  par(ask=FALSE)
+  n=length(trait1)
+  gamma.perm <- list()
+  library(plyr)
+  for (i in 1:100){
+    permfit <-sample(performance) #reshuffling relative speed across individuals
+    perm.coeff =est.coeff(permfit ,trait1 ,trait2 )
+    
+    gamma.perm[[i]] = matrix(c(perm.coeff [3], perm.coeff [5], perm.coeff [5], perm.coeff [4]), nrow=2, ncol=2)
+    
+    eigenvalue1.perm = laply(gamma.perm, function(x) eigen(x)$value[1])
+    eigenvalue2.perm = laply(gamma.perm, function(x) eigen(x)$value[2])
+    
+    persp.boot(perm.coeff[1],perm.coeff[2],perm.coeff[3],perm.coeff[4],perm.coeff[5],x=seq(-10,10,length=10),y=seq(-10,10,length=10))
+    Sys.sleep(0.1)
+  }
+  return(list('egv1.perm'= eigenvalue1.perm, 'egv2.perm' = eigenvalue2.perm))
+}
+
+perm.results <- perm(new.speed,new.body,new.tail)
+
+#How does your visual impression of this permutation animation compare with your impression of the bootstrap animation?
+
+#To quantify that comparison, let us consider the null distribution of the leading eigenvalue
+
+#Why are we interested in this distribution?
+
+```{r}
+hist(perm.results$egv1.perm,main='Permutation of selection surface',xlim=c(-0.1,0.2), xlab='Eigenvalue 1 of gamma matrix')
+#Fix vert scale on last plot and the next one
+abline(v = eigen(gamma)$value[1],col='red',lwd=2)
+x.values =  c(0.0,0.0)
+y.values = c(0,50)
+lines(x.values, y.values, lty = 2, lwd=2)
+arrows(quantile(boot.results$egv1.boot,0.025),2,quantile(boot.results$egv1.boot,0.975),2,code=3)
+```
+#What does this distribution tell us?
+#What does the red line indicate? What does the arrow indicate?
+
+#Now, look at the null distribution of the 2nd eigenvalue
+```{r}
+hist(perm.results$egv2.perm,main='Permutation of selection surface',xlim=c(-0.2,0.1), xlab='Eigenvalue 2 of gamma matrix')
+x.values =  c(0.0,0.0)
+y.values = c(0,50)
+lines(x.values, y.values, lty = 2, lwd=2)
+abline(v = eigen(gamma)$value[2],col='red',lwd=2)
+arrows(quantile(boot.results$egv2.boot,0.025),2,quantile(boot.results$egv2.boot,0.975),2,code=3)
+par(mfrow=c(1,1))
+```
+#What do the two distributions tell us?
+
+
+
+
+
+
+

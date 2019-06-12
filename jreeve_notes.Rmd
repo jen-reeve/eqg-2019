@@ -1,0 +1,1795 @@
+---
+title: "Evolutionary Quantitative Genetics Workshop"
+author: "Jen Reeve"
+date: "6/10/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries,warning=FALSE,message=FALSE}
+library(tidyverse)
+library(MCMCglmm)
+library(MasterBayes)
+library(plyr)
+library(rgl)
+library(MASS)
+library(car)
+library(akima)
+library(OUwie)
+library(corHMM)
+library(phytools)
+library(geiger)
+library(ape)
+library(nlme)
+library(bayou)
+```
+
+# Monday June 10 2019
+## Lecture 1.1: Introductions
+FHL is a land and marine preserve, part of UW.
+
+Low tides Friday/Saturday morning
+
+27 total students, 10ish instructors
+
+### Steve Arnold
+We are going to start at a micro level, but then we will expand out so we can integrate and look at deep evolutionary time.
+
+Currently writing "Phenotypic Evolution", argues how field of quantative genetics will help us understand adaptive ??
+
+Steve's lectures will have PDF presentation, the PPT presentation (with notes), lecture notes (essentially the chapters of a book he is writing) and readings relevant to the lecture.
+
+### Joe Felsenstein: the history of quantitative genetics and the basic model to keep in mind
+Late 1800s Galton and Pearson both tried to do quantitative theories of quant./discrete characters (prior to rediscovery of Mendel's work). They were crucial for development of statistical methods. They were also the founders of the eugenetics movements.... so there's that.
+
+Standard quantitative genetic model: apply the effects of all relevant genes and then apply the environmental effect
+
+## Lecture 1.2: Molecular quantitative genetics (Patrick Phillips)
+Early split between molecular and quantitative genetics, fundamental distinction is what the fundamental genetic unit is. Molecular genetics uses the locus as the smallest unit. Quantitative genetics considers the allele to be the fundamental unit. This allows for considering the different effects of different alleles, including how strong the effects are.
+
+Examples:
+- Pleiotropy:
+    - mol-bio: property of locus, is or is not
+    - quant-gen: property of allele, can be variable btw and within loci and can evolve.
+- Epistasis:
+    - mol-bio: mutation at one locus blocks effects of mutation at another
+    - quant-gen: many possible types of interaction
+    
+Multivariate selection: $\Delta\bar{z}=G\beta$
+
+Evolution of genetic architecture:
+- Pleiotropy: alleles affect multiple traits (Edinborough School)
+- Linkage: alleles/genes tend to be inherited together (Birmingham School)
+
+![Pleiotropy vs Linkage](figs/lec1.2-pleio-v-linkage.PNG)
+
+These matter b/c if you select for one trait, you can pull a second trait along with it.
+
+Evolution of the G matrix: 
+
+Finding the allele that matters
+
+## Lecture 1.3: Inheritance of a single trait and response to selection (Steve Arnold)
+Probably massively redundant, but that's good b/c it's a fire hose.
+
+Most traits are influenced by many genes, and we can model these traits with a statistical approach. This is not a new concept, Fischer was thinking about this in 1918. Additive genetic variance is the statistical concept that allows us to model inheritance and response to selection.
+
+### Phenotypic resemblance
+Looking at offspring as a function of parents.
+
+### Model
+$z$ is the phenotype, $x$ is the additive genetic effect and $e$ is the environmental effect.
+
+Phenotypic value: $z = x + e$
+
+Phenotypic mean: $\bar{z} = \bar{x} + \bar{e}$
+
+Phenotypic variance: $ P = G + E$
+
+$G$ is the additive genetic variance which is the key statistical property responsible for Galton's regression
+
+To move beyond parents and offspring we need to include dominance ($d$) and epistasis ($i$) in addition to the additive effects ($x$)
+
+### Examples
+Mother-daughter relationship in vertebral counts in garter snakes
+
+### Why don't we run out of additive genetic variance?
+Why don't we just lose genetic variance if under a stabilizing pressure? Mutation!
+
+### Changing the trait mean with selection
+- Response to selection as a regression problem
+- response to selection in a finite population
+- response to long term selection
+
+### Conclusions
+- G is the key to understanding resemblance
+- G is the key to modeling response to selection
+- G is nibbled away by selection and restored by mutation
+
+## Exercise 1.1: Estimation of heritability by parent-offspring regression in R
+
+**Part 1 Get the data file**
+#Modify the setwd line below so that it points to the folder you choose
+#Make sure the data txt file is in that folder
+
+```{r exercise1.1.a}
+file_path <- "data/R_inland_snake_data.txt"
+thamnophis = read.table(file_path,header=TRUE)
+attach(thamnophis)
+head(thamnophis)
+```
+
+**Part 2 Create a list of family names, no repeats**
+
+```{r exercise1.1.b}
+family.list=unique(family)
+family.list
+#The length of family.list is
+length(family.list)
+```
+
+**Part 3 Use family.list to calculate h2 and plot**
+
+```{r exercise1.1.c}
+moms=NULL
+kids=NULL
+for (i in family.list){ 
+  byfam=subset(body,family==i) 
+  #Create a vector of body vertebrae counts for family i
+  moms=rbind(moms,byfam[1]) 
+  #Save the moms count as the next element in the vector "moms"
+  kids=rbind(kids,mean(byfam[-1], na.rm=TRUE)) 
+  #Save the mean of the kids count as the next element in the vector "kids" (you are excluding the 1st element of the vector, which is the mom)
+}
+
+#Linear regression of kids on moms, will save a bunch of stuff in ls; to see the summary statistics run "summary(ls)", we especially want the slope, which is stored in ls$coefficients
+ls=lsfit(moms,kids) 
+par(mar = rep(2, 4))
+plot(moms, kids, col='blue', pch=19, cex=1.5)
+
+#Extract the 2nd coefficient from the object "coefficients" in "ls"
+slope=ls$coefficients[2] 
+abline(ls, lwd=5)
+#the heritability estimate is twice the slope because we are using just one parent, not both
+h.squared=2*slope
+h.squared
+```
+
+**Part 4 Make a function called h2 that will estimate heritability**
+
+```{r exercise1.1.d}
+h2=function(V){
+  family.list=unique(family)
+  moms=NULL
+  kids=NULL
+  for (i in family.list){
+    byfam=subset(V, family==i) 
+    moms=rbind(moms, byfam[1]) 
+    kids=rbind(kids, mean(byfam[-1], na.rm=TRUE)) 
+  }
+  plot(moms, kids, col='blue', pch=19, cex=1.5)
+  ls=lsfit(moms, kids)
+  abline(ls, lwd=5)
+  
+  slope=ls$coeff[2]
+  h.squared=2*slope
+
+  print('Point estimate of heritability is')
+  h.squared
+}
+print('Point estimate of heritability is')
+h.squared
+```
+
+**Test out the function on 3 traits by making point estimates of heritability**
+
+```{r exercise1.1.e}
+h2(body)
+h2(ilab)
+h2(tail)
+```
+
+**Part 5 Here is some script that will compute and plot a bootstrap sample for the estimate of hertitability for "body"**
+
+**Do NOT run the script below.  Instead, copy and paste it into the Console**
+```{r exercise1.1.f,include=FALSE}
+family.list=unique(family)
+h2.all=NULL
+for (j in 1:1000){
+  moms=NULL
+  kids=NULL
+  family.list.boot=sample(family.list,replace=TRUE)
+  for (i in family.list.boot){
+    byfam=subset(body,family==i) 
+    moms=rbind(moms,byfam[1]) 
+    kids=rbind(kids,mean(byfam[-1],na.rm=TRUE))
+  }
+  
+  ls=lsfit(moms, kids)
+  slope=ls$coeff[2]
+  h.squared=2*slope
+  #Save the heritability of replicate i as the ith element in vector h2.all
+  h2.all=rbind(h2.all,h.squared)  
+  #Graph showing the variation in points sampled
+  plot(moms,kids,xlim=c(150,180),ylim=c(150,180)) 
+  #Superimpose on that graph the regression ls
+  abline(ls$coefficients)
+  Sys.sleep(0.05)
+}
+```
+#The overlay plots give a visual impression of a nonzero slope
+
+# Now plot a histogram of the bootstrap heritability estimates
+```{r exercise1.1.g}
+hist(h2.all)
+#What does this histogram tell us?
+```
+
+## Lecture 1.4: Multivariate inheritance and response to selection (Steve Arnold)
+We can expand the G statistic into a G matrix to observe multiple traits simultaneously.
+
+Traits can run together in families.
+
+So what's the model for multivariate resemblance?
+
+Phenotypic value: $z = x + e = \begin{bmatrix} z_1\\ z_2\end{bmatrix} = \begin{bmatrix} x_1\\ x_2\end{bmatrix} + \begin{bmatrix} e_1\\ e_2\end{bmatrix}$
+
+Phenotypic mean: $\bar{z} = \bar{x} + \bar{e} = \begin{bmatrix} \bar{z_1}\\ \bar{z_2}\end{bmatrix} = \begin{bmatrix} \bar{x_1}\\ \bar{x_2}\end{bmatrix} + \begin{bmatrix} \bar{e_1}\\ \bar{e_2}\end{bmatrix}$
+
+Phenotypic variance/covariance: $P = G + E = \begin{bmatrix} P_{11} & P_{12}\\P_{12} & P_{22}\end{bmatrix} = \begin{bmatrix} G_{11} & G_{12}\\G_{12} & G_{22}\end{bmatrix} + \begin{bmatrix} E_{11} & E_{12}\\E_{12} & E_{22}\end{bmatrix}$
+
+The G matrix describes the cloud of genetic values. 
+We can consider this via principal components (or eigenvectors). 
+The first principal component has the most genetic variance. 
+The second principal component is orthogonal to the first.
+
+The genetic correlation is $r_g = G_{12}/\sqrt{G_{11}}G_{22}$
+
+
+
+## Exercise 1.2: multivariate inheritance
+### Tutorial 1: Matrix algebra session
+You will need to install some packages (MASS, car, rgl) if you have not already done so. Find the Packages tab in the bottom right and use the dialog box
+
+Start with the addition of two vectors. The first and third statements define the two vectors
+
+Notice that R treats vectors as 1 column or 1 row matrices
+```{r exercise 1.2.t1.a}
+a=matrix(data=c(2,3),nrow=2,ncol=1)
+a
+
+e=matrix(data=c(3,4),nrow=2,ncol=1)
+e
+```
+
+Now add the two vectors
+```{r exercise 1.2.t1.a2}
+z=a+e
+z
+```
+
+Now try matrix addition.  We begin by defining the two matrices that we will add.
+```{r exercise 1.2.t1.b}
+G=matrix(data=c(2,3,3,8),nrow=2,ncol=2)
+G
+
+E=matrix(data=c(1,2,2,5),nrow=2,ncol=2)
+E
+```
+
+Add the two matrices, we get
+```{r exercise 1.2.t1.c}
+P=G+E
+P
+```
+
+Next, multiply a matrix by a vector.  The following exercise computes the response to directional selection on two traits, given the G-matrix and a vector of selection gradients.
+```{r exercise 1.2.t1.d}
+beta=matrix(data=c(0.2,0.4),nrow=2,ncol=1)
+beta
+```
+
+The response to selection is
+```{r exercise 1.2.t1.e}
+deltazbar=G %*% beta
+deltazbar
+```
+
+Now, the multiplication of two matrices.  Here we depart from the sequence in the Arnold 1994 Appendix.  We will compute the inverse of a matrix and see if the product of a matrix and its inverse yields the identity matrix.
+```{r exercise 1.2.t1.f}
+Ginverse=solve(G)
+Ginverse
+```
+
+```{r exercise 1.2.t1.g}
+G %*% Ginverse
+```
+
+Finally, solve for the eigenvalues and eigenvectors of the G-matrix.  
+
+What does the output mean?
+```{r exercise 1.2.t1.h}
+eigen(G)
+```
+
+To find out what the output means, write some script that will take a sample using a bivariate G matrix, then plot the 95% confidence ellipse for that sample and the eigenvectors of our G matrix
+
+First, we define our matrix and take a look at it
+```{r exercise 1.2.t1.i}
+G=matrix(data=c(1,0.8,0.8,1),nrow=2, ncol=2,byrow=TRUE)
+G
+```
+
+Second, we load two libraries that we will need to call
+```{r exercise 1.2.t1.j}
+#library(MASS)
+#library(car)
+```
+
+Third, we take a sample of 100 data points from the parametric version of our G matrix
+```{r exercise 1.2.t1.k}
+data <- mvrnorm(1000, mu = c(0,0), Sigma=G)
+
+#Fourth, we plot our data
+x.range = c(-3.5,3.5)
+y.range = c(-3.5,3.5) 
+
+plot(data, xlim=x.range, ylim=y.range)
+```
+
+Fifth, we plot the 95% confidence ellipse in green
+```{r exercise 1.2.t1.l}
+plot(data, xlim=x.range, ylim=y.range)
+null.bar=c(0,0)
+ellipse(center=null.bar, shape=G, radius=2.5, center.cex=1, lwd=5, col="green", add=TRUE)
+```
+
+Sixth, take a look at the eigenvectors of our G matrix, so we understand the script that follows
+```{r exercise 1.2.t1.m}
+eigen(G)$vectors
+```
+
+Note that the center of the plot is null.bar, the bivariate mean
+```{r exercise 1.2.t1.n}
+null.bar
+```
+
+
+Seventh, plot the first eigenvector in blue. We want to use the lines function, so we need to specify three points to connect
+```{r exercise 1.2.t1.o}
+plot(data, xlim=x.range, ylim=y.range)
+ellipse(center=null.bar, shape=G, radius=2.5, center.cex=1, lwd=5, col="green", add=TRUE)
+n=5
+delx1 = null.bar[1]  + n*eigen(G)$vectors[1,1]
+delx2 = null.bar[2]  + n*eigen(G)$vectors[2,1]
+delx11 = null.bar[1]  - n*eigen(G)$vectors[1,1]
+delx22 = null.bar[2]  - n*eigen(G)$vectors[2,1]
+x.values=c(null.bar[1] , delx1, delx11)
+y.values=c(null.bar[2] , delx2, delx22)
+lines(x.values, y.values, lwd=3, col="blue")
+```
+
+Finally, plot the second eigenvector in red. Also, need to make this a square plot so that our axes look orthogonal
+```{r exercise 1.2.t1.p, fig.width=6,fig.height=6}
+plot(data, xlim=x.range, ylim=y.range)
+ellipse(center=null.bar, shape=G, radius=2.5, center.cex=1, lwd=5, col="green", add=TRUE)
+n=5
+delx1 = null.bar[1]  + n*eigen(G)$vectors[1,1]
+delx2 = null.bar[2]  + n*eigen(G)$vectors[2,1]
+delx11 = null.bar[1]  - n*eigen(G)$vectors[1,1]
+delx22 = null.bar[2]  - n*eigen(G)$vectors[2,1]
+x.values=c(null.bar[1] , delx1, delx11)
+y.values=c(null.bar[2] , delx2, delx22)
+lines(x.values, y.values, lwd=3, col="blue")
+m=5
+delx1 = null.bar[1] + m*eigen(G)$vectors[1,2]
+delx2 = null.bar[2] + m*eigen(G)$vectors[2,2]
+delx11 =  null.bar[1] - m*eigen(G)$vectors[1,2]
+delx22 =  null.bar[2]  - m*eigen(G)$vectors[2,2]
+x.values=c(null.bar[1], delx1, delx11)
+y.values=c(null.bar[2] , delx2, delx22)
+lines(x.values, y.values, lwd=3, col="red")
+```
+
+Now try changing the G matrix and see how the eigenvectors are affected. You will need to change the G statement and re-run data
+
+Finally, try plotting a 3 dimensional G-matrix. But first you need to find and load package rgl
+```{r exercise 1.2.t1.q}
+#library(rgl)
+
+G=matrix(data=c(1,0.9,0.8,0.9,1,0.8,0.8,0.8,1),nrow=3, ncol=3,byrow=TRUE)
+G
+data <- mvrnorm(1000, mu = c(0,0,0), Sigma=G)
+plot3d(data)
+```
+
+Now try modifying the input G-matrix in the chuck above and re-run it
+
+### Tutorial 2: Tutorial on direct and indirect selection
+
+Open R Studio and begin the session  by specifying a P-matrix
+```{r exercise 1.2.t2.a}
+P=matrix(data=c(1,0,0,1), nrow=2, ncol=2)
+P
+```
+
+We can make the specification a little less tedious by writing a function
+```{r exercise 1.2.t2.b}
+M=function(a, b, c) {matrix(data=c(a,b,b,c),nrow=2,ncol=2)}
+#so that when we call it, we do a little less typing
+P=M(1,0,1)
+P
+```
+
+Now, let beta specify a beta vector corresponding to direct selection on both traits of equal magnitude
+```{r exercise 1.2.t2.c}
+beta=c(1,1)
+beta
+```
+
+If that selection acts on our P-matrix, the resulting shifts in the means are given by the s-vector
+
+For this step we are using equation (2.03) from our lecture notes
+```{r exercise 1.2.t2.d}
+s=P%*%beta
+s
+```
+
+If the two traits are highly correlated, we solve for the s-vector with the following steps
+```{r exercise 1.2.t2.e}
+P=M(1,0.9,1)
+P
+s=P%*%beta
+s
+```
+
+But now if selection acts on just one trait, we get a bit of a surprise when we solve for s
+```{r exercise 1.2.t2.f}
+beta=c(1,0)
+beta
+s=P%*%beta
+s
+```
+
+Can you draw graphs that illustrate each of these three selection scenarios?
+
+### Using PCP software (h2boot) to estimate G-matrices
+The aim of this exercise is to gain some familiarity with multivariate inheritance. 
+We will gain this familiarity by estimating and comparing genetic variances and covariances for a suite of six traits in two populations of garter snakes. 
+You estimated heritabilities of these traits in one of these populations (inland) in Exercise 1.1
+
+Note: Initially only 10 selections will appear, but as you enter the choices below the menu will expand to 13 choices.
+
+1) Input file name: all_females_2pops.txt
+2) Trait names included in file: yes
+3) Output file name: All_females_out.txt
+4) Number of bootstrap runs: 1000
+5) Random number seed: 1994
+6) Create files for bootstrap distributions: no
+7) Type of analysis: Parent-off regression w/full-sib ANOVA
+8) Only use families with complete data: no
+9) Analyzing multiple populations: yes
+10) Make population comparisons: yes
+11) Bend non-positive definite matrices: yes
+12) Automatically order eigenvectors in PCP analysis: yes
+enter 0) End selection and run program.
+
+Now into interpretation:
+
+Interpreting the probability values for various outcomes in the h2boot output for the INLAND population by plotting normal distributions in R.
+After each highlighted statement, paste the command lines into R.
+
+Here's an example of a bootstrap distribution in which the parameter lies between 0 and 1. 
+The example is the heritability of ILAB, for which the point estimate is about 0.6 with a standard error of about 0.09.
+The bootstrap distribution resembles the plot that follows, with the probability of a value less than 0 of about 0.25.
+
+```{r exercise 1.2 interpretation.a}
+curve(dnorm(x, mean=0.06, sd=0.09), xlim=c(-0.5,1.5))
+x.values=c(1,1)
+y.values=c(-5,5)
+lines(x.values, y.values)
+x.values=c(0,0)
+y.values=c(-5,5)
+lines(x.values, y.values)
+```
+
+In other words, we can't bound the estimate away from 0)
+
+Here's an example of a bootstrap distribution in which the parameter lies between -5 and +10. 
+The example is the phenotypic covariance between BODY and SUB, for which the point estimate is about 3.9 with a standard error of about 2.2. 
+The bootstrap distribution resembles the plot that follows, with the probability of a value less than 0 of about 0.074.
+```{r exercise 1.2 interpretation.b}
+curve(dnorm(x, mean=3.9, sd=2.2), xlim=c(-5,10))
+x.values=c(0,0)
+y.values=c(-5,5)
+lines(x.values, y.values)
+```
+
+Here's an example of a bootstrap distribution in which the parameter lies between -1 and +1. 
+The example is the phenotypic correlations between BODY and SUB, for which the point estimate is about 0.25 with a standard error of about 0.14. 
+The bootstrap distribution shows no probability that the estimate is less than -1 (0.00) or more than +1 (0.00), and a low probability that the estimate is less than 0 (0.074)
+
+```{r exercise 1.2 interpretation.c}
+curve(dnorm(x, mean=0.25, sd=0.14), xlim=c(-1.5,1.5))
+x.values=c(0,0)
+y.values=c(-5,5)
+lines(x.values, y.values)
+x.values=c(1,1)
+y.values=c(-5,5)
+lines(x.values, y.values)
+x.values=c(-1,-1)
+y.values=c(-5,5)
+lines(x.values, y.values)
+```
+
+Here's another example of a bootstrap distribution in which the parameter lies between -1 and +1. 
+The example is the phenotypic correlation between BODY and ILAB, for which the point estimate is about 0.06 with a standard error of about 0.34. 
+The bootstrap distribution shows a small probability that the estimate is less than -1 (0.002) or more than +1 (0.006), and a high probability that the estimate lies in the vicinity of 0 (0.852)
+
+```{r exercise 1.2 interpretation.d}
+curve(dnorm(x, mean=0.06, sd=0.34), xlim=c(-2,2))
+x.values=c(0,0)
+y.values=c(-5,5)
+lines(x.values, y.values)
+x.values=c(1,1)
+y.values=c(-5,5)
+lines(x.values, y.values)
+x.values=c(-1,-1)
+y.values=c(-5,5)
+lines(x.values, y.values)
+```
+
+**Viewing the bootstrap output with histograms**
+
+To see the bootstrap distributions produced by h2boot, you should have answered 'yes' to the query 'Create files for bootstrap distributions?'. 
+If you did not answer 'yes', go back thru the instructions in h2boot and answer 'yes' to that query. 
+Then, after running h2boot, look for the file named 'h2dist0.txt' on your desktop or folder.  It contains the bootstrap distribution of heritability estimates for the first population, which is named '0'. 
+Open the file in Notepad and add a header line that reads 'body tail mid ilab slab post'. 
+Rename the file 'h2dist0_header.txt' and save it in a desktop folder called 'R wd'. 
+Now, tell R where to find 'R wd' and make it your working directory, by modifying the first command below.
+
+```{r exercise 1.2 bootstrap.a,eval=FALSE}
+#setwd('C:/Documents and Settings/arnolds/Desktop/R wd')
+#Read in the data file you just created and call it 'boot_output'
+ boot_output = read.table('h2dist0_header.txt',header=T)
+#Attach the data file to your local environment
+attach(boot_output)
+```
+
+Make histograms of the bootstrap distributions, one trait at a time, each time asking hist to place counts of observations on top of each bar in the histogram
+
+```{r exercise 1.2 bootstrap.b,eval=FALSE}
+hist(body, labels=T)
+hist(tail, labels=T)
+hist(mid, labels=T)
+hist(ilab, labels=T)
+hist(slab, labels=T)
+hist(post, labels=T)
+```
+
+Compare each of these histograms to the appropriate output column in all_females_2pops.out 
+For which traits can we claim that the point estimate of h2 is bounded away from zero? 
+How can we calculate the significance level for h2 estimate for, say, the body trait?
+
+For that discussion we will use the final section of the h2boot output (which shows estimates of matrices under different models of population similarity), but we also need output from a second program, cpcrand.exe. 
+To get out put from that program go back to the PCP website, download cpcrand.exe and place it in the same folder as the data file All_females_2pops. 
+Run cpcrand.exe (in the same way that you ran h2boot). 
+When the command screen comes up, answer the queries as follows:
+
+    Input file name: All_females_2pops.txt
+    Trait names included in file: yes
+    Output file name: cpc.out
+    Number of randomization runs: 1000
+    Random number seed: 1996
+    Create files for likelihood distributions: yes
+    Type of analysis: Parent-off regression w/full-sib ANOVA
+    Only use families with complete data: yes
+    Bend non-positive definite matrices: yes
+    Automatically order eigenvectors in PCP analysis: yes
+
+This program will conduct statistical tests for various models of similarity between the two G-matrices (identity, proportionality, common principal components, etc). 
+Stand by with your output file (cpc.out) for discussion in class. 
+We will compare the cpc.out results for comparison of G-matrices with Table 3 and Figure 3 in Phillips & Arnold 1999.
+
+# Tuesday June 11 2019
+## Lecture 2.1: Estimation of inheritance with fixed and random errors (Patrick Carter)
+Dealing with more complex datasets:
+- linear mixed models
+
+This means that there are both fixed and random effects.
+- fixed effects: population specific/experimental effects
+- random effects: variables randomly sampled from a populations (ie: individuals sampled from a pop.)
+
+Another way to think about fixed v random: would you be able to get the effect again if you repeated the experiment? 
+Temp of experiment is fixed, the random individual measured (and thus thing from the distribution) causes random effects. 
+(Courtesy of Patrick Phillips)
+
+### The animal model
+So named only for who developed it, not what it works on.
+
+$\color{red}{y}=\color{green}{X\beta}+\color{blue}{Za}+\color{purple}{e}$
+
+$\color{green}{\text{FIXED}}$
+
+$\color{blue}{\text{RANDOM}}$
+
+- $\color{red}{\text{y is the vector of phenotypic measures, n by 1 in size}}$
+- $\color{green}{\beta\text{ is the vector of fixed effect regression coefficients, it is p by 1 in size}}$
+- $\color{green}{\text{X is a design matrix relating }}\color{red}{\text{y }}\color{green}{\text{to }\beta\text{, n by p in size}}$
+- $\color{blue}{\text{a is a vector of additive effects that is q (the number of individuals in the pedigree) by 1 in size}}$
+- $\color{blue}{\text{Z is a design matrix relating }}\color{red}{\text{y }}\color{blue}{\text{to a, n by q in size}}$
+- $\color{purple}{\text{e is a vector of errors, n by 1 in size}}$
+
+Solving for $\color{green}{\beta}$ and \textcolor{blue}{a}
+
+Assuming:
+- $Var(e)=I\sigma_e^2$ aka errors are independent
+- $Var(a)=A\sigma_a^2$ the variance of a depends on relationship matrix A
+- $cov(a,e)=0$
+- $\alpha=\sigma_e^2/\sigma^2_a$ is known (need a starting point)
+
+Can add a maternal aspect to this.
+
+## Exercise 2.1
+This R script was written by Pat Carter in April 2019 for Biol 521 and the Friday Harbor Evolutionary Quantitative Genetics class, and is a modification of R Scripts written in June 2018for the Friday Harbor Evolutionary Quantitative Genetics class,  April 2017 for WSU Biology 521, and in August 2016 for the NIMBioS Evolutionary Quantitative Genetics course.
+The purpose of this script is to highlight code needed to run quantitative genetic analyses in R using MCMCglmm. 
+The data to be analyzed are 3 phenotypic traits from a toy data set: Ptype1, Ptype2 and Ptype3 generated in Biol521-2018-1.R. 
+Data were generated for only one generation but pedigree information is known for parents and grandparents. 
+Individuals were measured in one of two batches. 
+
+```{r exercise 2.1.a}
+#IMPORTANT NOTE: You will need to change the path for opening and saving data files to whatever is appropriate to your computer
+
+
+#######################################################
+#Visualize and examine the data 
+
+#Clear memory if needed
+rm(list=ls()) 
+
+#load graphics library ggplot2
+library(ggplot2)
+
+#open the data file and read it in as an R data file
+Toy4 <- read.table ("data/Toy4SimZ.dat",header = T)
+
+#look at the header of the data file
+head(Toy4)
+#summarize the data file
+summary (Toy4)
+
+# look at distributions of the 3 Ptypes
+Toy41.hist = hist(Toy4$Ptype1, breaks = 20)
+Toy42.hist = hist(Toy4$Ptype2, breaks = 20)
+Toy43.hist = hist(Toy4$Ptype3, breaks = 20)
+
+#plot the phenotypes with each other
+qplot(x = Ptype1, y = Ptype2, data = Toy4, geom = "point", color = factor(Batch) )
+qplot(x = Ptype1, y = Ptype3, data = Toy4, geom = "point", color = factor(Batch) )
+qplot(x = Ptype2, y = Ptype3, data = Toy4, geom = "point", color = factor(Batch) )
+
+#Look at covariance structure and correlations
+#Choose variables for which we want covariances
+TempVar <- subset(Toy4, select = c(Ptype1,Ptype2,Ptype3))
+summary(TempVar)
+#Get covariance matrix  
+CV = cov(TempVar)
+#Get correlation matrix
+CR = cor(TempVar)
+#Look at eigen structure just for fun
+EigCV <- eigen(CV)
+EigCV
+```
+
+```{r exercise 2.1.b}
+#######################################################
+# create pedigree file 
+
+# Important information about the structure and construction of pedigree files to be used by MCMCglmm
+# pedigree files contain identification information for measured individuals and their mothers (Dam) and fathers (Sire) and other ancestors
+# this file may contain many generations of individuals for whom phenotypes were never measured
+# note that offspring always must have larger id numbers than their parents, parents must have larger id numbers than grandparents, etc
+
+# make sure missing values for Sire and Dam identification numbers are coded as NA
+# make sure that dam and sire id numbers are coded as factors
+# the identifiation variable for the individuals with phenotypic information in the data set MUST be called animal and it should remain a numeric variable
+# the pedigree file should be sorted by the variable animal
+
+# individuals may appear in the pedigree as animal and they may also appear as a Sire or Dam
+
+# frequently you must create the pedigree file from the data file, as we have to do here
+# the data file contains one record for each measured individual
+# each record contains data on all 3 phenotypes as well as identification information on parents and grandparents
+
+rm(list=ls())
+
+#the MasterBayes and plyr libraries are needed to make the pedigree
+library(MasterBayes)
+library(plyr)
+
+#open the data file
+Toy4 <- read.table ("data/Toy4SimZ.dat",header = T)
+
+#Create Offspring pedigree
+Toy4Pedid<-subset(Toy4,select=c(Id,Sireid,Damid))
+Toy4Pedid<-rename(Toy4Pedid,c(Id="animal"))
+
+#Create Pedigree of dams
+#save one record per dam
+Toy4PedDam<- aggregate(Toy4, list(Toy4$Damid), FUN=head, 1)
+#choose only identification information for pedigree
+Toy4PedDam<-subset(Toy4PedDam,select=c(Damid,MGsireid,MGdamid))
+#rename variables
+Toy4PedDam<-rename(Toy4PedDam,c(Damid="animal",MGsireid="Sireid",MGdamid="Damid"))
+
+#Create Pedigree of sires
+#save one record per sire
+Toy4PedSire<- aggregate(Toy4, list(Toy4$Sireid), FUN=head, 1)
+#choose only identication information for pedigree
+Toy4PedSire<-subset(Toy4PedSire,select=c(Sireid,PGsireid,PGdamid))
+#rename variables
+Toy4PedSire<-rename(Toy4PedSire,c(Sireid="animal",PGsireid="Sireid",PGdamid="Damid"))
+
+#Combine all 3 files using rbind to make one full pedigree file
+Toy4ped<-rbind(Toy4Pedid,Toy4PedDam,Toy4PedSire)
+#sort by animal number
+Toy4ped<-Toy4ped[order(Toy4ped$animal),]
+
+# this commmand from the MasterBayes library completes a pedigree with missing information for some sires and dams 
+# by adding the generation in which all Dams and Sires were unknown; you will need to do this when making your pedigree file:
+Toy4ped<-insertPed(Toy4ped, founders=NULL)
+
+#replace "." with NA for missing values for Sire and Dam id numbers
+Toy4ped$Sireid[Toy4ped$Sireid=="."]<-NA
+Toy4ped$Damid[Toy4ped$Damid=="."]<-NA
+
+#identify Dam and Sire as numeric
+Toy4ped$Damid <- as.numeric(Toy4ped$Damid)
+Toy4ped$Sireid <- as.numeric(Toy4ped$Sireid)
+
+#save pedigree file as an R data file
+save(Toy4ped,file="data/Toy4ped.rat")
+```
+
+```{r exercise 2.1.c}
+###############################################
+# modify data file
+
+# make sure missing values for Sire and Dam id numbers are coded as NA
+# make sure that dam and sire id numbers are coded as factors
+# the identifiation variable for individuals with phenotypic data MUST called animal and it should remain a numeric variable
+# drop cases of individuals without phenotypic data 
+# file should be sorted by the variable animal
+
+Toy4 <- read.table ("data/Toy4SimZ.dat",header = T)  #dont forget to change the path#
+
+#replace "." with NA for missing values for Sire and Dam id numbers
+Toy4$Sireid[Toy4$Sireid=="."]<-NA
+Toy4$Damid[Toy4$Damid=="."]<-NA
+
+#identify Dam and Sire as numeric
+Toy4$Damid <- as.numeric(Toy4$Damid)
+Toy4$Sireid <- as.numeric(Toy4$Sireid)
+
+#rename the variable id as animal
+Toy4<-rename(Toy4,c(Id="animal"))
+
+#extract only the variables we need
+Toy4<-subset(Toy4, select = c(animal,Sireid,Damid,Batch, Ptype1, Ptype2, Ptype3))
+
+#summarize data file (Note: before this point you should already have thoroughly graphed and examined your data)
+summary(Toy4)
+#save data file as an R data file
+save(Toy4,file="data/Toy4.rat")
+```
+
+```{r exercise 2.1.d,eval=FALSE}
+#######################################################
+# Model 101: Trait = Ptype1, Batch fixed, Additive effects only random effect
+
+#needed library for running genearlized linear mixed models
+library(MCMCglmm)
+
+#Clear memory if needed
+rm(list=ls()) 
+
+#load the data file and the pedigree file
+load("data/Toy4.rat")
+load("data/Toy4ped.rat")
+
+# set up parameters for the priors
+# Fixed effects are automatically set by MCMCglmm to follow a normal distribution and do not need to be specified
+# G is for specified random effects (additive, maternal, etc). 
+# Here we set for weak priors that will be used in an inverse gamma disribution automatically set by MCMCglmm
+# R is residual effects for each specified random effect and follows same rules as G
+prior101 <- list(R = list(V=1, nu=0.002), G = list(G1 = list(V=1, nu=.002)))
+
+# prunePed ensures that ancestors of focal animals are retained in the pedigree
+Toy4PrunePed<-prunePed(Toy4ped,keep=1001:4500, make.base=TRUE)
+
+# model statement
+model101 <- MCMCglmm(Ptype1 ~ 1 + Batch,                #intercept (the 1) and Batch are the fixed effect
+                     random = ~animal,                  #additive effects (animal) the only random effect
+                     family = "gaussian",               #phenotype has gaussian distribution
+                     prior = prior101,                  #call the priors parameters defined above
+                     data = Toy4,                       #call the data file
+                     nitt = 1000000,                    #number of MCMC iterations 
+                     burnin = 2000,                     #number of iterations for burnin
+                     thin = 500,                        #sampling interval
+                     pedigree = Toy4ped)                #call the pedigree to get the inverse of the NRM
+
+#save model output as an R object so we can access it later; this is very important when the nitt is very high
+save(model101, file = "data/model101.obj") #dont forget to change the path#
+```
+
+```{r exercise 2.1.d2}
+#load model output file
+load(file = "data/model101.obj") #dont forget to change the path#
+
+#plot trace and density of fixed effects; should be no trend in trace
+plot(model101$Sol)
+#plot trace and density of random (additive and residual (=environmental)) variances; should be no trend in trace
+plot(model101$VCV)
+
+#examine autocorrelation of fixed effects
+autocorr.diag(model101$Sol)
+#examine autocorrelation of random (additive and residual) variances
+autocorr.diag(model101$VCV)
+
+#check effective population size for fixed effects; should be gt 1000
+effectiveSize(model101$Sol)
+#check effective population size for random effects (additve and residual variances); should be gt 1000
+effectiveSize(model101$VCV)
+
+#test of convergence, p should be greater than 0.05 for good convergence
+heidel.diag(model101$VCV)
+
+#estimates of additive and residual variances
+posterior.mode(model101$VCV)
+
+#summary of model; make sure to check DIC score (smaller is better)
+summary(model101)
+
+#estimate posterior distribution of the heritability (animal variance divided by animal + residual variances)
+herit <- model101$VCV[, "animal"]/(model101$VCV[, "animal"] + model101$VCV[, "units"])
+
+#effective sample size for heritability should be gt 1000
+effectiveSize(herit)
+
+# get the mean from the posterior disribution of heritability
+mean(herit)
+
+# get confidence interval for heritability
+HPDinterval(herit)
+
+#plot the trace of heritability, should not be any pattern
+plot(herit)
+```
+
+```{r exercise 2.1.e,eval=FALSE}
+#######################################################
+# Model 1101: Trait = Ptype1, Batch fixed, Additive effects and maternal effects are random
+
+#needed library for running genearlized linear mixed models
+library(MCMCglmm)
+
+#Clear memory if needed
+rm(list=ls()) 
+
+load("data/Toy4.rat")
+load("data/Toy4ped.rat")
+
+# set up parameters for the priors
+# Fixed effects are automatically set by MCMCglmm to follow a normal distribution and do not need to be specified
+# G is for specified random effects (additive, maternal, etc). 
+# Here we set for weak priors that will be used in an inverse gamma disribution automatically set by MCMCglmm
+# R is residual effects for each specified random effect and follows same rules as G
+prior1101 <- list(R = list(V=1, nu=0.002), G = list(G1 = list(V=1, nu=0.002), G2 = list(V = 1, nu = 0.002)))
+
+# model statement
+model1101 <- MCMCglmm(Ptype1 ~ 1 + Batch,               #intercept (the 1) and Batch are the fixed effect
+                     random = ~animal + Damid,          #additive (animal) and maternal (Damid) are random effects
+                     family = "gaussian",               #phenotype has gaussian distribution
+                     prior = prior1101,                 #call the priors parameters defined above
+                     data = Toy4,                       #call the data file
+                     nitt = 100000,                     #number of MCMC iterations 
+                     burnin = 10000,                    #number of iterations for burnin
+                     thin = 1000,                       #sampling interval
+                     pedigree = Toy4ped)                #call the pedigree to get the inverse of the NRM
+                     
+
+#save model as an R object so we can access it later
+save(model1101, file = "data/model1101.obj") #dont forget to change the path#
+```
+
+```{r exercise 2.1.e2}
+#load model file
+load(file = "data/model1101.obj") #dont forget to change the path#
+
+#plot trace and density of fixed effects; should be no trend in trace
+plot(model1101$Sol)
+#plot trace and density of random (additive, maternal and residual (=environmental)) variances; should be no trend in trace
+plot(model1101$VCV)
+
+#examine autocorrelation of fixed effects
+autocorr.diag(model1101$Sol)
+#examine autocorrelation of random (additive, maternal and residual) variances
+autocorr.diag(model1101$VCV)
+
+#check effective population size for fixed effects; should be gt 1000
+effectiveSize(model1101$Sol)
+#check effective population size for random effects (additve, maternal and residual variances); should be gt 1000
+effectiveSize(model1101$VCV)
+
+#test of convergence, p should be greater than 0.05 for good convergence
+heidel.diag(model1101$VCV)
+
+#estimates of additive and residual variances
+posterior.mode(model1101$VCV)
+
+#summary of model; make sure to check DIC score (smaller is better)
+summary(model1101)
+
+#estimate posterior distribution of the heritability (animal vairance divided by animal + maternal +  residual variances)
+herit <- model1101$VCV[, "animal"]/(model1101$VCV[, "animal"] + model1101$VCV[, "Damid"] + model1101$VCV[, "units"])
+
+#effective sample size for heritability should be gt 1000
+effectiveSize(herit)
+
+# get the mean from the posterior disribution of heritability
+mean(herit)
+
+# get confidence interval for heritability
+HPDinterval(herit)
+
+#plot the trace of heritability, should not be any pattern
+plot(herit)
+```
+
+```{r exercise 2.1.f,eval=FALSE}
+#######################################################
+# Model 1201: Traits = Ptype1 and Ptype2; Fixed = Batch, Random = Additive 
+
+#Clear memory if needed
+rm(list=ls()) 
+
+#needed library for running genearlized linear mixed models
+library(MCMCglmm)
+
+# read in pedigree file; see details of pedigree data structure in model 101
+
+load("data/Toy4ped.Rat")
+# summarze pedigree file
+summary(Toy4ped)
+
+# read in data file; see details of data file structure in model 101
+
+load("data/Toy4.Rat")
+summary(Toy4)
+
+# set up parameters for the priors
+# Fixed effects are automatically set by MCMCglmm to follow a normal distribution and do not need to be specified
+# G is for specified random effects (additive, maternal, etc). 
+# Here we set for weak priors that will be used in an inverse gamma disribution automatically set by MCMCglmm
+# R is residual effects for each specified random effect and follows same rules as G
+prior1201 <- list(R=list(V=diag(2)*(0.002/1.002),nu=1.002),
+                  G=list(G1=list(V=diag(2)*(0.002/1.002),nu=1.002)))
+
+# model statement
+model1201 <- MCMCglmm(cbind(Ptype1,Ptype2)~trait-1 + Batch,                 #cbind combines the two traits into a matrix, intercept not fit, no fixed effects
+                     random = ~us(trait):animal,                            #random effects, see below for explanation
+                     rcov=~us(trait):units,                                 #residual effects, see below for explanation
+                     family = c("gaussian","gaussian"),                     #both phenotypes have gaussian distribution
+                     prior = prior1201,                                     #call the priors parameters
+                     data = Toy4,                                           #call the data file
+                     nitt = 2000000,                                        #number of MCMC iterations
+                     burnin = 10000,                                        #number of iterations for burnin
+                     thin = 1000,                                           #sampling interval
+                     pedigree = Toy4ped)                                    #call the pedigree to get the inverse of the NRM
+
+# A note on the random statement in a multivariate model
+#
+# The term random=~us(trait):animal means for the additive effect use the following structure for the G matrix:
+#    V1    COV12      where V1 = variance of trait 1 and COV12 = covariance of traits 1 and 2
+#    COV12 V2         where V2 = variance of trait 2 and COV12 = covariance of traits 1 and 2
+# which is usually what we want.  
+
+# If we want to set a G matrix with covariances of 0 we would put this term into our model
+# random=~idh(trait):animal which means for the additive effect use the following structure for the G matrix
+#    V1  0            where V1 and V2 are the variances of traits 1 and 2 respectively
+#    0   V2           and the covariances are set to zero
+#
+# Finally we can put the following term in the random statement
+# random=~animal
+# which means use the following matrix
+#   V  V
+#   V  V
+# i.e., all the variances and covariances are assumed to be equal
+# The same logic and syntax apply to the rcov command which estimates the residual variances and covariances
+
+
+#save model as an R object so we can access it later if needed
+save(model1201, file = "data/model1201.obj")
+```
+
+```{r exercise 2.1.f2}
+#load model if needed
+load("data/model1201.obj")
+
+#plot trace and density of fixed effects; should be no trend in trace
+plot(model1201$Sol)
+#plot trace and density of random (additive and residual) variances; should be no trend in trace
+plot(model1201$VCV)
+
+#examine autocorrelation of fixed effects
+autocorr.diag(model1201$Sol)
+#examine autocorrelation of random (additive and residual) variances
+autocorr.diag(model1201$VCV)
+
+#check effective population size for fixed effects; should be gt 1000
+effectiveSize(model1201$Sol)
+#check effective population size for random effects (additve and residual variances); should be gt 1000
+effectiveSize(model1201$VCV)
+
+#test of convergence, p should be greater than 0.05 for good convergence
+heidel.diag(model1201$VCV)
+
+#estimates of additive and residual variances
+posterior.mode(model1201$VCV)
+
+#summary of model; make sure to check DIC score (smaller is better)
+summary(model1201)
+
+#estimate posterior distribution of the heritability for trait = Ptype1
+heritPtype1 <- model1201$VCV[, "traitPtype1:traitPtype1.animal"]/(model1201$VCV[, "traitPtype1:traitPtype1.animal"] + model1201$VCV[, "traitPtype1:traitPtype1.units"])
+#effective sample size for heritability of trait 1 (should be gt 1000)
+effectiveSize(heritPtype1)
+# get the mean from the posterior disribution of heritability 
+mean(heritPtype1)
+# get confidence interval for heritability
+HPDinterval(heritPtype1)
+#plot the trace of heritability, should not be any pattern
+plot(heritPtype1)
+
+
+#estimate posterior distribution of the heritability for trait = Ptype2
+heritPtype2 <- model1201$VCV[, "traitPtype2:traitPtype2.animal"]/(model1201$VCV[, "traitPtype2:traitPtype2.animal"] + model1201$VCV[, "traitPtype2:traitPtype2.units"])
+#effective sample size for heritability of Ptype2 (should be gt 1000)
+effectiveSize(heritPtype2)
+# get the mean from the posterior disribution of heritability
+mean(heritPtype2)
+# get confidence interval for heritability
+HPDinterval(heritPtype2)
+#plot the trace of heritability, should not be any pattern
+plot(heritPtype2)
+
+
+#estimate posterior distribution of the genetic correlation between Ptype1 and Ptype2 
+GenCorrPtype1Ptype2 <-model1201$VCV[, "traitPtype1:traitPtype2.animal"]/sqrt(model1201$VCV[, "traitPtype1:traitPtype1.animal"]*model1201$VCV[, "traitPtype2:traitPtype2.animal"])
+#effective sample size for genetic correlation (should be gt 1000)
+effectiveSize(GenCorrPtype1Ptype2)
+#mean of posterior distribution of genetic correlation
+mean(GenCorrPtype1Ptype2)
+#get confidence interval for genetic correlation
+HPDinterval(GenCorrPtype1Ptype2)
+#plot the trace of genetic correlation, should not be any pattern
+plot(GenCorrPtype1Ptype2)
+```
+
+```{r exercise 2.1.g,eval=FALSE}
+#######################################################
+# Model 2001: Traits = Ptype1, Ptype2, Ptype3; Fixed = Batch, Random = Additive 
+
+#Clear memory if needed
+rm(list=ls()) 
+
+#needed library for running genearlized linear mixed models
+library(MCMCglmm)
+
+# read in pedigree file; see details of pedigree data structure in model 101
+
+load("data/Toy4ped.Rat")
+# summarze pedigree file
+summary(Toy4ped)
+
+# read in data file; see details of data file structure in model 101
+
+load("data/Toy4.Rat")
+summary(Toy4)
+
+# set up parameters for the priors
+# Fixed effects are automatically set by MCMCglmm to follow a normal distribution and do not need to be specified
+# G is for specified random effects (additive, maternal, etc). 
+# Here we set for weak priors that will be used in an inverse gamma disribution automatically set by MCMCglmm
+# R is residual effects for each specified random effect and follows same rules as G
+prior2001 <- list(R=list(V=diag(3)*(0.002/1.002),nu=1.002),
+                  G=list(G1=list(V=diag(3)*(0.002/1.002),nu=1.002)))
+
+# model statement
+model2001 <- MCMCglmm(cbind(Ptype1,Ptype2,Ptype3)~trait-1 + Batch,           #cbind combines the three traits into a matrix, intercept not fit, Batch is fixed
+                      random = ~us(trait):animal,                            #random effects, see below for explanation
+                      rcov=~us(trait):units,                                 #residual effects, see below for explanation
+                      family = c("gaussian","gaussian","gaussian"),          #all phenotypes have gaussian distribution
+                      prior = prior2001,                                     #call the priors parameters
+                      data = Toy4,                                           #call the data file
+                      nitt = 100000,                                         #number of MCMC iterations
+                      burnin = 10000,                                        #number of iterations for burnin
+                      thin = 1000,                                           #sampling interval
+                      pedigree = Toy4ped)                                    #call the pedigree to get the inverse of the NRM
+
+# For notes on the random statement in a multivariate model see Model 1201
+
+
+#save model as an R object so we can access it later if needed
+save(model2001, file = "data/model2001.obj")
+```
+
+```{r exercise 2.1.g2,eval=FALSE}
+#load model if needed
+load("data/model2001.obj")
+
+#plot trace and density of fixed effects; should be no trend in trace
+plot(model2001$Sol)
+#plot trace and density of random (additive and residual) variances; should be no trend in trace
+plot(model2001$VCV)
+
+#examine autocorrelation of fixed effects
+autocorr.diag(model2001$Sol)
+#examine autocorrelation of random (additive and residual) variances
+autocorr.diag(model2001$VCV)
+
+#check effective population size for fixed effects; should be gt 1000
+effectiveSize(model2001$Sol)
+#check effective population size for random effects (additve and residual variances); should be gt 1000
+effectiveSize(model2001$VCV)
+
+#test of convergence, p should be greater than 0.05 for good convergence
+heidel.diag(model2001$VCV)
+
+#estimates of additive and residual variances
+posterior.mode(model2001$VCV)
+
+#summary of model; make sure to check DIC score (smaller is better)
+summary(model2001)
+
+#estimate posterior distribution of the heritability for trait = Ptype1
+heritPtype1 <- model2001$VCV[, "traitPtype1:traitPtype1.animal"]/(model2001$VCV[, "traitPtype1:traitPtype1.animal"] + model2001$VCV[, "traitPtype1:traitPtype1.units"])
+#effective sample size for heritability of trait 1 (should be gt 1000)
+effectiveSize(heritPtype1)
+# get the mean from the posterior disribution of heritability 
+mean(heritPtype1)
+# get confidence interval for heritability
+HPDinterval(heritPtype1)
+#plot the trace of heritability, should not be any pattern
+plot(heritPtype1)
+
+
+#estimate posterior distribution of the heritability for trait = Ptype2
+heritPtype2 <- model2001$VCV[, "traitPtype2:traitPtype2.animal"]/(model2001$VCV[, "traitPtype2:traitPtype2.animal"] + model2001$VCV[, "traitPtype2:traitPtype2.units"])
+#effective sample size for heritability of PC2 (should be gt 1000)
+effectiveSize(heritPtype2)
+# get the mean from the posterior disribution of heritability
+mean(heritPtype2)
+# get confidence interval for heritability
+HPDinterval(heritPtype2)
+#plot the trace of heritability, should not be any pattern
+plot(heritPtype2)
+
+
+#estimate posterior distribution of the heritability for trait = Ptype3
+heritPtype3 <- model2001$VCV[, "traitPtype3:traitPtype3.animal"]/(model2001$VCV[, "traitPtype3:traitPtype3.animal"] + model2001$VCV[, "traitPtype3:traitPtype3.units"])
+#effective sample size for heritability of trait 1 (should be gt 1000)
+effectiveSize(heritPtype3)
+# get the mean from the posterior disribution of heritability 
+mean(heritPtype3)
+# get confidence interval for heritability
+HPDinterval(heritPtype3)
+#plot the trace of heritability, should not be any pattern
+plot(heritPtype3)
+
+
+#estimate posterior distribution of the genetic correlation between Ptype1 Ptype2
+GenCorrPtype1Ptype2 <-model2001$VCV[, "traitPtype1:traitPtype2.animal"]/sqrt(model2001$VCV[, "traitPtype1:traitPtype1.animal"]*model2001$VCV[, "traitPtype2:traitPtype2.animal"])
+#effective sample size for genetic correlation (should be gt 1000)
+effectiveSize(GenCorrPtype1Ptype2)
+#mean of posterior distribution of genetic correlation
+mean(GenCorrPtype1Ptype2)
+#get confidence interval for genetic correlation
+HPDinterval(GenCorrPtype1Ptype2)
+#plot the trace of genetic correlation, should not be any pattern
+plot(GenCorrPtype1Ptype2)
+
+
+#estimate posterior distribution of the genetic correlation between Ptype1 and Ptype3 
+GenCorrPtype1Ptype3 <-model2001$VCV[, "traitPtype1:traitPtype3.animal"]/sqrt(model2001$VCV[, "traitPtype1:traitPtype1.animal"]*model2001$VCV[, "traitPtype3:traitPtype3.animal"])
+#effective sample size for genetic correlation (should be gt 1000)
+effectiveSize(GenCorrPtype1Ptype3)
+#mean of posterior distribution of genetic correlation
+mean(GenCorrPtype1Ptype3)
+#get confidence interval for genetic correlation
+HPDinterval(GenCorrPtype1Ptype3)
+#plot the trace of genetic correlation, should not be any pattern
+plot(GenCorrPtype1Ptype3)
+
+
+#estimate posterior distribution of the genetic correlation between Ptype2 and Ptype3 
+GenCorrPtype2Ptype3 <-model2001$VCV[, "traitPtype2:traitPtype3.animal"]/sqrt(model2001$VCV[, "traitPtype2:traitPtype2.animal"]*model2001$VCV[, "traitPtype3:traitPtype3.animal"])
+#effective sample size for genetic correlation (should be gt 1000)
+effectiveSize(GenCorrPtype2Ptype3)
+#mean of posterior distribution of genetic correlation
+mean(GenCorrPtype2Ptype3)
+#get confidence interval for genetic correlation
+HPDinterval(GenCorrPtype2Ptype3)
+#plot the trace of genetic correlation, should not be any pattern
+plot(GenCorrPtype2Ptype3)
+```
+
+## Lecture 2.2: Selection as a surface (Steve Arnold)
+
+## Exercise 2.2: Estimating a selection surface (Steve Arnold)
+
+**Computational Exercise 2.2: Estimating and plotting a selection surface**
+**Copyright Stevan J. Arnold & Monique N. Simon 2019**
+
+**Step 1 Get your data into R**
+
+Save the file Radix5_2012.txt to your desktop or folder of choice
+
+In the following example, we have created a folder called R_wd and placed the data file in it
+
+Set your working directory using a statement comparable to this one
+
+Be sure and use the / not the \ spacing convention!
+
+If you have not already,iInstall the package called 'plyr'
+
+Use the Packages tab in the lower right corner
+
+```{r exercise 2.2.a}
+#setwd('C:/Documents and Settings/arnolds/Desktop/R wd')
+
+#Now read in your data
+thamnophis = read.table('data/Radix5_2012.txt',header=TRUE)
+#Attach the data frame to the local environment
+attach(thamnophis)
+#Print out the data frame to make sure it looks OK
+thamnophis
+```
+
+**Step 2  Estimating the selection gradients**
+
+Use the following statements to create standardized versions of BODY, TAIL, and TIME
+
+We want to standardize BODY and TAIL so that their means are zero and their sds are 1
+
+We want to standardize SPEED so that it's mean is 1
+
+These standardizations will simplify the interpretations of the coefficients that we will estimate
+
+```{r exercise 2.2.b}
+new.body=(BODY-mean(BODY))/sd(BODY)
+new.tail=(TAIL-mean(TAIL))/sd(TAIL)
+new.speed=SPEED/mean(SPEED)
+
+#Do these transformations achieve the right means and standard deviations for the new variables?
+#Find out by using statements like mean(new.body), sd(new.body).
+```
+
+**Step 3  Let us begin by fitting a plane to the transformed data**
+  
+```{r exercise 2.2.c}  
+model <-lm(new.speed~new.body + new.tail)
+#print out the coefficients and statistics of the fit
+#this output will give us our best estimates of the directional selection gradients for 
+#new.body and new.tail
+summary(model)
+```
+
+#Which column represents the linear selection gradients?
+
+**Step 4 Now, fit a full quadratic model to the data**
+
+Remember to use the factor of 0.5 for the stabilizing selection gradients
+
+This model will give us estimates of the nonlinear selection gradients, gamma
+
+First, create a new variable called prod which is the product of new.body and new.tail
+
+```{r exercise 2.2.d}
+prod = new.body*new.tail
+#Then fit the quadratic model
+model <- lm(new.speed ~ new.body + new.tail + I(0.5*new.body^2) + I(0.5*new.tail^2) + prod )
+summary(model)
+```
+
+Up to this point, using z1 for body and z2 for tail, we have estimated beta from the linear fit and gamma from the quadratic fit, so that we have
+
+```{r exercise 2.2.c results}
+beta1= 0.031408  
+beta2= 0.001504
+gamma11 = -0.010578
+gamma22 = -0.005914
+gamma12 =  0.079017
+```
+
+Because of our standardization, beta1 tells us that if we increase the value of new.body by 1 sd, we will increase new.speed by 3.1%
+
+**Step 5 Plotting the selection surface, an ISS**
+
+Use the parameters for a full quadratic fitness surface for two traits
+
+```{r exercise 2.2.e}
+z1 = new.body
+z2 = new.tail
+#Set the value for the intercept of the surface when z1=z2=0
+alpha=1
+#Define a function called fit that will compute the value of fitness as a function of z1 and z2
+fit <-  function(z1,z2, alpha, beta1, beta2, gamma11, gamma22, gamma12)  alpha + (beta1*z1) + (beta2*z2) + (gamma11*0.5*(z1^2)) + (gamma22*0.5*(z2^2)) + (gamma12*(z1 * z2)) 
+#Define a series of values for z1 and z2 that will be used to compute the value of relative fitness on the surface
+x <- seq(-2, 2, length = 30)
+y <- seq(-2, 2, length = 30)
+
+# Compute the surface values of relative fitness using the x-y grid of values for z1 and 
+# z2 for later use by the surface plotting function called persp
+#We could use the fit function to compute values of fitness but instead we will use a #function, called outer, that is more compatible with persp
+# The function outer has some specific requirements so we oblige by writing our fitness 
+# function in the following form
+
+z <- outer(x, y, function(a, b, alpha, beta1, beta2, gamma11, gamma22, gamma12) 1 + (0.031408*a) + (0.001504*b) + (-0.010578 *0.5*(a^2)) + (-0.005914 *0.5*(b^2)) + ( 0.079017 *(a * b)))
+
+#Define two variables that give the number of rows and cols in z
+nrz <- nrow(z)
+ncz <- ncol(z)
+
+# Create a function interpolating colors in the range of specified colors
+jet.colors <- colorRampPalette( c("yellow", "orange") )
+
+# Generate the desired number of colors from this palette
+nbcol <- 100
+color <- jet.colors(nbcol)
+
+# Compute the z-value at the facet centres
+zfacet <- z[-1, -1] + z[-1, -ncz] + z[-nrz, -1] + z[-nrz, -ncz]
+
+# Recode facet z-values into color indices
+facetcol <- cut(zfacet, nbcol)
+
+#Finally, plot the ISS
+par(bg = "white")
+persp(x, y, z, col=color[facetcol], xlab="Number of body vertebrae", ylab="Number tail vertebrae", zlab="Crawling speed",phi=30, theta=-30)
+```
+
+We have plotted crawling speed performance surface for the body and tail vertebral counts
+
+Step 6 Plot the eigenvectors on the surface
+
+For another view of the surface, do a simple contour plot
+
+Then draw the eigenvectors on that contour plot
+
+```{r exercise 2.2.f}
+par(pty ="s")
+contour(x, y, z,lwd=2, labcex=1.5,xlab="Number of body vertebrae", ylab="Number tail vertebrae")
+```
+
+What is the shape of this performance surface? It will help to add the eigenvectors of the gamma-matrix to the plot
+
+Do, we redo the contour plot and add the eigenvectors of the gamma-matrix
+
+```{r exercise 2.2.g}
+par(pty ="s")
+contour(x, y, z,lwd=2, labcex=1.5,xlab="Number of body vertebrae", ylab="Number tail vertebrae")
+
+#To add the eigenvectors, first, define the matrix. 
+gamma = matrix(c(gamma11, gamma12, gamma12, gamma22), nrow=2, ncol=2)
+gamma
+eigen(gamma)
+#Next, setup the beta vector and check to see if its values are correct
+beta = matrix(c(beta1, beta2), nrow=2, ncol=1)
+beta
+#Using gamma and beta, we can solve for the stationary point on the surface using
+#expression(11) from Phillips & Arnold 1989
+z.zero = -(solve(gamma)) %*% beta
+#Plot the stationary point on the surface
+points(z.zero[1,1], z.zero[2,1],pch=8,col='red',cex=2)
+#Finally, plot the eigenvectors on the surface
+#First plot the first eigenvector
+delx1 = z.zero[1]  + 6*eigen(gamma)$vectors[1,1]
+delx2 = z.zero[2]  + 6*eigen(gamma)$vectors[2,1]
+delx11 = z.zero[1]  - 6*eigen(gamma)$vectors[1,1]
+delx22 = z.zero[2]  - 6*eigen(gamma)$vectors[2,1]
+x.values=c (delx1, z.zero[1], delx11)
+y.values=c(delx2, z.zero[2], delx22)
+lines(x.values, y.values, lty=2, lwd=2,col='red')
+#then plot the other
+delx1 = z.zero[1] + 6*eigen(gamma)$vectors[1,2]
+delx2 = z.zero[2] + 6*eigen(gamma)$vectors[2,2]
+delx11 =  z.zero[1] - 6*eigen(gamma)$vectors[1,2]
+delx22 =  z.zero[2]  - 6*eigen(gamma)$vectors[2,2]
+x.values=c(delx1, z.zero[1], delx11)
+y.values=c(delx2, z.zero[2], delx22)
+lines(x.values, y.values, lty=2,lwd=2,col='red')
+```
+
+Which of these eigenvectors is gamma max?
+
+Now, estimate the omega-matrix (which we encountered in the notes), approximating it as the negative inverse of the gamma-matrix
+
+```{r exercise 2.2.h}
+omega=-(solve(gamma))
+omega
+#Its eigenvectors should be opposite those of the gamma matrix.
+#Lets check
+eigen(omega)
+#What is the interpretation of the eigenvalues on the contour plot?
+```
+
+Scroll up to see - for comparison - the eigen vectors of gamma
+
+Step 7 Build a loop that will show the surface plot while bootstrapping 
+
+Here is an example of script that does that!
+
+Why would we want to bootstrap the surface?
+
+We begin by writing a function that we will use during bootstrapping to estimate the coefficients that describe the surface for a particular boot sample
+
+
+```{r exercise 2.2.i}
+est.coeff=function(y,x1,x2){
+  prod=x1*x2
+  m1=lm(y~x1+x2)
+  m2=lm(y~x1+x2+I(0.5*x1^2)+I(0.5*x2^2)+prod)
+  c(m1$coeff[2],m1$coeff[3],m2$coeff[4],m2$coeff[5],m2$coeff[6])
+}
+
+##Next, we program a perspective plot function
+x <- seq(-2, 2, length = 30)
+y <- seq(-2, 2, length = 30)
+# Compute the surface values of relative fitness using the x-y grid of values for z1 and 
+# z2 for later use by the surface plotting function called persp
+#We could use the fit function to compute values of fitness but instead we will use a #function, called outer, that is more compatible with persp
+# The function outer has some specific requirements so we oblige by writing our fitness function in the following form
+##Write a function that plots the perspective plot for each bootstrap
+persp.boot=function(b1,b2,y1,y2,y12,x=seq(-10,10,length=30),y=seq(-10,10,length=30)){
+  z <- outer(x, y, function(a, b, alpha, beta1, beta2, gamma11, gamma22, gamma12) 1 + ( b1*a) + (b2*b) + (y1*0.5*(a^2)) + (y2*0.5*(b^2)) + (y12*(a * b)))
+  nrz <- nrow(z)
+  ncz <- ncol(z)
+  jet.colors <- colorRampPalette( c("yellow", "orange") )
+  nbcol <- 100
+  color <- jet.colors(nbcol)
+  zfacet <- z[-1, -1] + z[-1, -ncz] + z[-nrz, -1] + z[-nrz, -ncz]
+  facetcol <- cut(zfacet, nbcol)
+  par(bg = "white")
+  persp(x, y, z, xlab="Number of body vertebrae", ylab="No. tail vertebrae", zlab="Crawling speed", col=color[facetcol],phi=30,theta=-30)
+}
+
+##Test it out
+persp.boot(-2,2,1,1,1)
+```
+
+Bootstrap over individuals
+
+Copy the following script - from the next line to the next comment - and paste it into the Console
+
+```{r exercise 2.2.j ,eval=FALSE}
+boot <- function(performance,trait1,trait2)
+{
+  par(ask=FALSE)
+  n=length(trait1)
+  gamma.boot <- list()
+  library(plyr)
+  for (i in 1:100){
+    samp=sample(1:n,n,replace=TRUE) #resampling individuals with replacment
+    boot.speed =performance[samp]
+    boot.body =trait1[samp]
+    boot.tail =trait2[samp]
+    boot.coeff =est.coeff(boot.speed ,boot.body ,boot.tail )
+
+    gamma.boot[[i]] = matrix(c(boot.coeff [3], boot.coeff [5], boot.coeff [5], boot.coeff [4]), nrow=2, ncol=2)
+   
+    eigenvalue1.boot = laply(gamma.boot, function(x) eigen(x)$value[1])
+    eigenvalue2.boot = laply(gamma.boot, function(x) eigen(x)$value[2])
+    
+    persp.boot(boot.coeff[1],boot.coeff[2],boot.coeff[3],boot.coeff[4],boot.coeff[5],x=seq(-10,10,length=10),y=seq(-10,10,length=10))
+    Sys.sleep(0.1)
+  }
+  return(list('egv1.boot'= eigenvalue1.boot, 'egv2.boot' = eigenvalue2.boot))
+}
+
+boot.results <- boot(new.speed,new.body,new.tail)
+```
+
+What is your visual impression of the performance surface based on this bootstrapping exercise?
+
+**Step 8 Plot the eigenvalue distributions for all the bootstraped gammas**
+
+Why do we want to look at the eigenvalue distributions?
+
+First, the distribution of the leading eigenvalue
+
+```{r exercise 2.2.k}
+#par(mfrow=c(1,1))
+hist(boot.results$egv1.boot,main='Bootstrap of selection surface',xlab='Eigenvalue 1 of the gamma matrix')
+x.values =  c(0.0,0.0)
+y.values = c(0,50)
+lines(x.values, y.values, lty = 2, lwd=2)
+```
+
+What can we conclude about the surface shape along this dimension?
+
+Next, the distribution of the 2nd eigenvalue
+
+```{r exercise 2.2.l}
+hist(boot.results$egv2.boot,main='Bootstrap of selection surface',xlab='Eigenvalue 2 of the gamma matrix')
+#Need to pause here before next plot
+x.values =  c(0.0,0.0)
+y.values = c(0,50)
+lines(x.values, y.values, lty = 2, lwd=2)
+par(mfrow=c(1,1))
+```
+
+What is the shape along this dimension?
+
+Step 9 Compare our sampling error distribution of the eigenvalues with a random distribution of eigenvalues
+
+Why would we want to do that?
+
+To compute the random distribution, we will reshuffle relative speed across individuals using a function we will call perm
+
+Copy the script below and paste it into the Console
+
+```{r exercise 2.2 no run, eval=FALSE}
+perm <- function(performance,trait1,trait2)
+{
+  par(ask=FALSE)
+  n=length(trait1)
+  gamma.perm <- list()
+  library(plyr)
+  for (i in 1:100){
+    permfit <-sample(performance) #reshuffling relative speed across individuals
+    perm.coeff =est.coeff(permfit ,trait1 ,trait2 )
+    
+    gamma.perm[[i]] = matrix(c(perm.coeff [3], perm.coeff [5], perm.coeff [5], perm.coeff [4]), nrow=2, ncol=2)
+    
+    eigenvalue1.perm = laply(gamma.perm, function(x) eigen(x)$value[1])
+    eigenvalue2.perm = laply(gamma.perm, function(x) eigen(x)$value[2])
+    
+    persp.boot(perm.coeff[1],perm.coeff[2],perm.coeff[3],perm.coeff[4],perm.coeff[5],x=seq(-10,10,length=10),y=seq(-10,10,length=10))
+    Sys.sleep(0.1)
+  }
+  return(list('egv1.perm'= eigenvalue1.perm, 'egv2.perm' = eigenvalue2.perm))
+}
+
+perm.results <- perm(new.speed,new.body,new.tail)
+```
+
+How does your visual impression of this permutation animation compare with your impression of the bootstrap animation?
+
+To quantify that comparison, let us consider the null distribution of the leading eigenvalue
+
+Why are we interested in this distribution?
+
+```{r exercise 2.2.m}
+hist(perm.results$egv1.perm,main='Permutation of selection surface',xlim=c(-0.1,0.2), xlab='Eigenvalue 1 of gamma matrix')
+#Fix vert scale on last plot and the next one
+abline(v = eigen(gamma)$value[1],col='red',lwd=2)
+x.values =  c(0.0,0.0)
+y.values = c(0,50)
+lines(x.values, y.values, lty = 2, lwd=2)
+arrows(quantile(boot.results$egv1.boot,0.025),2,quantile(boot.results$egv1.boot,0.975),2,code=3)
+```
+
+What does this distribution tell us?
+
+What does the red line indicate? What does the arrow indicate?
+
+Now, look at the null distribution of the 2nd eigenvalue
+
+```{r exercise 2.2.n}
+hist(perm.results$egv2.perm,main='Permutation of selection surface',xlim=c(-0.2,0.1), xlab='Eigenvalue 2 of gamma matrix')
+x.values =  c(0.0,0.0)
+y.values = c(0,50)
+lines(x.values, y.values, lty = 2, lwd=2)
+abline(v = eigen(gamma)$value[2],col='red',lwd=2)
+arrows(quantile(boot.results$egv2.boot,0.025),2,quantile(boot.results$egv2.boot,0.975),2,code=3)
+par(mfrow=c(1,1))
+```
+
+What do the two distributions tell us?
+
+## Lecture 2.3: Evolution on a surface (Steve Arnold)
+
+
+
+## R Bootcamp
+### Exercise 1
+```{r bootcamp 1}
+require(geiger)   ## Geiger depends on the ape package
+data(geospiza)    ## loads dataset geospiza
+
+class(geospiza) # tells you the class of the object
+mode(geospiza) # checks/sets the type/storage mode of an object
+length(geospiza) # tells you the size of the object
+names(geospiza) # tells you the names of the items in the object
+
+tree <- geospiza$geospiza.tree  
+data <- geospiza$geospiza.data
+
+class(tree)
+mode(tree)
+length(tree)
+names(tree)
+
+plot(tree)
+nodelabels()
+tiplabels()
+
+tree$edge
+class(tree$edge)
+mode(tree$edge)
+length(tree$edge)
+dim(tree$edge)
+
+#x11()   # or x11() or X11() if not on a mac
+plot(tree$edge)
+
+?plot.phylo
+
+plot(tree, edge.color="red")
+plot(tree, edge.color=c("red", "orange", "yellow"), edge.width=5)
+plot(tree, edge.color=c("red", "orange", "yellow"), edge.width=5, edge.lty=2)
+
+tiplabels()
+nodelabels()
+```
+
+```{r bootcamp exercise 1a}
+## Exercise: Plot tree with black branches, make only branch going from 
+## node 18 to Platyspiza (11) red. Note that each descendant is only represented 
+## once in column 2. This involves making a vector of color names that corresponds 
+## to the rows of the edge matrix to supply to edge.color 
+colors <- c(rep("black",22),"red",rep("black",3))
+
+plot(tree,edge.color=colors)
+
+
+## Try coloring or crating a dashed line to whichever branches you choose.
+
+
+####  make a subtree using the extract.clade function in ape  see ?extract.clade
+
+tree5 <- extract.clade(tree, 21)  ## grab a subtree including node 21 and all descendants
+plot(tree5)
+nodelabels()
+tiplabels()
+
+bl5 <-  tree5$edge.length   ## save the original branch lengths as bl5
+bl <- rnorm(length(bl5), mean=mean(bl5), sd=sd(bl5))   ## random branch lengths
+```
+
+```{r bootcamp exercise 1b}
+### Exercise: replace the branch lengths in your subtree with the random ones
+tree5$edge.length <- bl
+
+plot(tree5)
+nodelabels()
+tiplabels()
+
+
+```
+
+```{r bootcamp exercise 1c}
+### Exercise: create functions and use them to do some simulations of random branch lengths
+
+bl <- -1
+while(any(bl < 0)) bl <- rnorm(length(bl5), mean=mean(bl5), sd=sd(bl5))
+
+gen.bl <- function( ttree ) {
+	bl <- -1
+	el <- ttree$edge.length
+	while(any(bl < 0)) bl <- rnorm(length(el), mean=mean(el), sd=sd(el))
+	return(bl)
+}
+
+change.bl <- function( ttree, bl ){
+	ttree$edge.length <- bl
+	return(ttree)
+}
+
+branchlengths <- gen.bl(tree5)
+simtree <- change.bl(tree5, branchlengths)
+plot(simtree)
+```
+
+```{r bootcamp exercise 1d}
+
+### Exercise: Branch length simulation 2. Instead of drawing each branch length from a random normal distribution, letʻs assume that the original branch lengths are estimated with some error, letʻs assume that the sd = 25% of the branch length value.
+
+
+bl <- -1
+while(any(bl < 0)) bl <- rnorm(length(bl5), mean=mean(bl5), sd=sd(bl5))
+
+gen.bl <- function( ttree ) {
+	bl <- -1
+	el <- ttree$edge.length
+	while(any(bl < 0)) bl <- rnorm(length(el), mean=mean(el), sd=abs(0.25*el))
+	return(bl)
+}
+
+change.bl <- function( ttree, bl ){
+	ttree$edge.length <- bl
+	return(ttree)
+}
+
+branchlengths <- gen.bl(tree5)
+simtree <- change.bl(tree5, branchlengths)
+plot(simtree)
+
+
+```
+
+### Exercise 2
+```{r bootcamp exercise 2.1}
+bases <- c("a","t","c","g")
+random_dna <- sample(bases,400,replace=TRUE)
+```
+
+```{r bootcamp exercise 2.2}
+write.csv(random_dna,file="data/reeve_dna.csv")
+```
+
+```{r bootcamp exercise 2.3}
+start_codon <- c("a","t","g")
+start_index<-c()
+i<-1
+while (i < length(random_dna)){
+  if ((random_dna[i]=="a")&(random_dna[i+1]=="t")&(random_dna[i+2]=="g")){
+    start_index<-rbind(start_index,i)
+  }
+  i<-i+1
+}
+print(start_index)
+```
+
+```{r bootcamp exercise 2.4}
+find_codons<-function(sequence,codon){
+  start_index<-c()
+  i<-1
+  while (i < length(sequence)){
+  if ((sequence[i]==codon[1])&(sequence[i+1]==codon[2])&(sequence[i+2]==codon[3])){
+    start_index<-rbind(start_index,i)
+  }
+  i<-i+1
+  }
+  print(start_index)
+}
+
+find_codons(random_dna,start_codon)
+
+stop_codon<-list(c("t","a","g"),c("t","g","a"),c("t","a","a"))
+find_codons(random_dna,stop_codon[[1]])
+find_codons(random_dna,stop_codon[[2]])
+find_codons(random_dna,stop_codon[[3]])
+```
+
+```{r bootcamp exercise 2.5}
+# use remainder, so let's edit the find_codon function to include finding the remainder
+find_codons<-function(sequence,codon){
+  start_index<-c()
+  i<-1
+  while (i < length(sequence)){
+  if ((sequence[i]==codon[1])&(sequence[i+1]==codon[2])&(sequence[i+2]==codon[3])){
+    start_index<-rbind(start_index,c(i,i%%3))
+  }
+  i<-i+1
+  }
+  print(start_index)
+}
+find_codons(random_dna,start_codon)
+```
+
+# Other stuff
