@@ -1792,4 +1792,1110 @@ find_codons<-function(sequence,codon){
 find_codons(random_dna,start_codon)
 ```
 
+# Wednesday June 12 2019
+Heads up: notes for net$\beta$ can be found in the Lecture 1.4 notes online.
+
+## Lecture 3.1: A simulation-based approach to the evolution of the G-matrix (Adam Jones)
+We care about G-matrix stability b/c it lets us know about the ability to use over longer time periods.
+
+$\Delta\bar{z}=G\beta$
+
+Extrapolate to reconstruct the history of selection: $\beta_T=G^{-1}\Delta z_T$. 
+This can also be used to predict the future trajectory. 
+But for this to be valid you need to know that the G matrix is stable over the time period of interest.
+
+Stability of G-matrix is an important question.
+- empirical comparisons of G between populations within a species usually, but not always, produce similar G-matrices
+- studies at higer taxonomic levels (between species/genera) more often reveal differences among G-matrices
+- analytical theory cannot guarantee G-matrix stability
+- analytical theory also cannot guarantee G-matrix instability, nor can it predict level of variation
+
+Address using computer simulations. 
+
+Also of interest is the M matrix (mutational architecture)
+
+
+
+## Exercise 3.1: G-matrix stability and evolution
+Using some software from the Jones Lab.
+
+## Lecture/Exercise 3.2: Brownian motion, contrasts and comparative methods (Samantha Price and Joe Felsenstein)
+How can we approximate the change of quantitative characters?
+- when it occurs via genetic drift of existing alleles?
+- when it also occurs by mutations in new alleles?
+- when variable selection affects the alleles at each locus?
+- when selection is on the fitness based on the whole phenotype?
+
+Variation and covariation in change of characters occurs for 2 reasons:
+- genetic covariances: same loci effect 2+ traits
+- selective covariances: same environmental conditions select changes in 2+ traits even though they may have no genetic covariance
+
+We can infer the additive genetic covariances through quantitative genetics experiments, but selective covariances require a very thorough understanding of the functional ecology.
+
+### How to move Brownian motion onto a phylogeny?
+To simulation BM on a phylogeny we need: time and BM rate.
+
+Can play with these simulations via R packages (fastBM in phytools, etc)
+
+The covariance of descendents is the variance of their shared evolution.
+
+What if you want to estimate the $\sigma^2$ rather than use a $\sigma^2$ to run a simulation? 
+We can use the phylogenetic Variance-CoVariance matrix to estimate $\sigma^2$ from tip data.
+
+$\sigma^2=\frac{(X-E(X))'C^{-1}(X-E(X))}{N}$ where $X$ is the observed tip states, $E(X)$ is the expected tip values (under BM this is mean 0 with sd), and $C$ is the phylogenetic variance-covariance matrix.
+
+### Contrasts
+
+
+Need branch lengths, can use BM to infer the division points, or could use molecular data to create branch lengths and say that the trait change occurs faster in branches which are evolving faster. Whether using molecular change or time is better has yet to be addressed. __could experimental evolution data answer this?__ Time allows for a defined ruler (one year is one year)
+
+
+### Using BM: changes in $\sigma^2$
+Variations over time
+- rates accelerating through time
+- early or late bursts
+
+Can address with PICs: big contrast means high rate of change, use node height test
+- take absolute value of the PIC and plot against the node height (distance btw root and node of contrast)
+- early burst: higher PIC closer to root
+- late burst: higher PIC farther from root
+
+Can address with model comparison: $Rate_{(t)}=\sigma^2_0*e^{(rt)}$
+- exponential term looks at change of rate over time
+- if r is less than 0 the rate is declining with time, if r greater than 0 the rate is accelerating through time
+
+Variations over branches
+- shifts in rates over specific branchs or at certain time periods
+- one clade evolves at a different rate than others
+- helpful for considering key innovations, clade differences, impact of ecological changes, impact of geological events
+
+Address with PIC:
+- identify contrasts in different clades and look for a difference
+- use non-parametric tests (Mann-Whitney U)
+
+Address with VCV:
+- clade/state dependent shifts in rate
+- time dependent shifts in rate (ie mass extinctions, etc)
+- break about matrix calculations between the rates and sum appropriately
+
+Practical considerations:
+- number of regimes/parameters estimated vs. number of taxa
+    - investigate this using parametric bootstrapping approaches: OUwie
+- evenness of species number in each regime
+
+identifying shifts with no *a priori* hypotheses:
+- geiger
+- phytools
+- MotMot
+- BayesTraits v3 (not R)
+- BAMM (not R)
+
+### exercises
+```{r exercise 3.2 functions}
+medianize <- function(ev) {
+# "medianize" principal component (ev) by getting the medians
+# of the values for the  x  coordinates or for the  y  coordinates
+p <- length(ev);
+medx <- median(ev[seq(1,(p-1),2)]);
+medy <- median(ev[seq(2,p,2)]);
+medxy <- medx*rep(c(1,0),p/2)+medy*rep(c(0,1),p/2);
+return(medxy);
+}
+
+
+plotmeansandpc <- function(a, pc) {
+# plot mean form, with PC loadings as red arrows
+  n1 <- dim(a)[1];                # number of forms in array a
+  p1 <- dim(a)[2]-1;              # number of coordinates (not counting name)
+  if ((dim(a)[2] %% 2) == 0) {
+    p1 <- p1 - 1;                 # ... and not counting log-size if it is there
+  }
+  minx <- min(a[ ,seq(2,p1,2)]);      # minimum of x's
+  maxx <- max(a[ ,seq(2,p1,2)]);      # maximum of x's
+  miny <- min(a[ ,seq(3,(p1+1),2)]);    # minimum of y's
+  maxy <- max(a[ ,seq(3,(p1+1),2)]);    # maximum of y's
+  btemp <- colSums(a[,2:(p1+1)])/n1;    # get coordinates of the mean form
+  b <- matrix(c(btemp[1:p1],btemp[1],btemp[2]),2,(p1/2)+1);
+                                           #  coordinates for outline of mean form
+                                           #  with starting point duplicated at end
+  plot(t(b), type = "l", asp = 1, xlab = "", ylab = "", xlim = c(minx, maxx), ylim = c(miny, maxy), col="gray",lwd=4);
+                                           # plot mean form as gray outline
+  ctemp <- matrix(pc, 2, p1/2);            # get a matrix of the PC
+  for (i in 1:(p1/2)) {                    # plot red arrows for pc on mean form landmarks
+    arrows( as.numeric(btemp[2*i-1]) - as.numeric(ctemp[1, i]), 
+            as.numeric(btemp[2*i]) - as.numeric(ctemp[2, i]),
+            as.numeric(btemp[2*i-1]) + as.numeric(ctemp[1, i]), 
+            as.numeric(btemp[2*i]) + as.numeric(ctemp[2, i]),
+            length = 0.05, angle = 20, col = "red", lwd = 4);
+  }
+}
+
+
+plotmeansandpcmed <- function(z,pc) {
+# plot mean form in gray and PCs in red for departure from medianized PC
+  plotmeansandpc(z, pc-medianize(pc));
+}
+```
+
+```{r exercise 3.2 contrasts}
+#
+#               Lab Exercise #1 for Lecture/Exercise 3.2
+#                            Joe Felsenstein
+#
+#
+# This is a lab exercise on contrasts, using the "pic" function of the
+# "ape" phylogeny package in R.  I recommend that you *not* try to run
+# this file, but instead keep it open in a window or an editor, and copy
+# out the relevant parts and paste them into your R environment as needed.
+#
+# The data sets used will be 20-variable samples.  Each are
+# measurements of the morphology of a fish, the fictional salmon-shark,
+# whose form has evolved along a phylogeny.  The 20 variables come from
+# the (x,y) coordinates of 10 landmarks on its two dimensional form:
+# (x1,y1), (x2,y2), ... (x10, y10).  These forms have been superposed
+# by a maximum likelihood method (Felsenstein and Bookstein, in prep.) and
+# rescaled to remove size differences.  We will discuss that geometric
+# morphometrics in a separate session.
+
+# In this exercise, we use the word "coordinates" for the variables.
+# If you are puzzled by the word coordinate, think of it as "variable".
+
+# There is a tree, and the (imaginary) fishes evolve by correlated
+# Brownian Motion, and the forms at the tips are sampled and superposed.
+#
+# There are 10 replicates of 100 fish in each sample.  The specimen names are
+# A, AB, AC, B, BA, BB, BC, and so on to ZAB, but with name NA changed to
+# NAA to avoid confusion with the R language symbol for missing information.
+
+# There are five phylogenies and each has two replicate sets of fishes
+# evolved on it.  Thus data sets fishes.1 and fishes.2 evolved in the first
+# tree, fishes.3 and fishes.4 on the second, and so on. I have included
+# those trees with the same numbering as the data sets.  So  intree.1
+# is the tree for fishes.1, intree.2 is the tree for fishes.2, which is
+# actually that same tree, intree.3 is the tree for fishes.3, which is
+# the second tree, and so on.
+
+
+
+# We start by getting the "ape" package
+#
+library(ape)
+#
+
+# If you don't have "ape" installed, this will not work.  In that case
+# see the instructions at the Ape site:
+#   http://ape-package.ird.fr/ape_installation.html
+#
+#
+#
+# Ape contains the functions read.tree and pic function that we will use.
+# (pic  means "phylogenetically independent contrasts")
+#
+#
+# (in these instructions I have been greatly helped by an excellent lab
+# prepared by Brian O'Meara)
+#
+# which input file will we use:
+#
+infile = "data/fishes.1"
+intree = "data/intree.1"
+#
+#
+# Now read that tree into an  ape  tree
+#
+tr <- read.tree(intree)
+#
+#
+# Now read the data into a frame 
+#
+datafile <- read.table(infile)
+#
+#
+# how many species, how many coordinates
+#
+spp <- dim(datafile)[1]            # how many species
+coords <- dim(datafile)[2] - 1     # how many columns not counting species names
+#
+# and also make a matrix with just the coordinates but without the species names
+#
+datacoords <- as.matrix(datafile[,2:(coords+1)])
+#
+#
+# Now make a matrix with space for spp-1 contrasts per coordinate
+#
+contrasts <- matrix(0, spp-1, coords)
+#
+#
+# Now things get obscure.  The "pic" function assumes that the rows of
+# the data matrix are in the same order as the tips of the tree are, 
+# going across the tree from left to right.
+#
+# The next statement reorders the rows of the data coordinates to make the rows
+# of the data table (datacoords) be in that order:
+#
+datacoords <- datacoords[match(tr$tip.label,datafile[,1]),]
+#
+# NOTE:  this obscure step is VERY important, otherwise the mapping of tips
+# to rows of the data matrix will be wrong, and you will get wierd,
+# meaningless results.
+#
+#
+#
+# Now populate the columns by calling  pic  with tree  tr.  For each
+# coordinate  pic (phylogenetically independent contrasts)  makes contrasts
+# for one variable, which would be one column of our data matrix
+#
+for (i in 1:coords) { contrasts[,i] <- pic(datacoords[,i],tr) }
+#
+#
+# Now we want to get covariances of characters, estimated using the
+# contrasts and also a set estimated using the raw species values
+#
+contrastcovs <- cov(contrasts)
+#
+tipcovs <- cov(datacoords)
+#
+#
+# It might be interesting to get the first principal component of each of
+# these covariance matrices.
+# In the R functions "eigen" and "svd" the first column of the matrix of
+# eigenvectors are the weights of the first principal component
+# (the second principal component, PC2, may be worth looking at too
+#
+contrastsPC1 <- eigen(contrastcovs)$vectors[,1]
+#
+tipsPC1 <- eigen(tipcovs)$vectors[,1]
+#
+#
+# You can think of doing this on all the data sets  fishes.1, fishes.2, ...
+# each with the corresponding tree (intree.1, intree.2, intree.3, ...
+#
+# If instead of the covariances we want the correlation coefficients
+# we can use the R function "cov2cor":
+#
+contrastcorrs <- cov2cor(contrastcovs)
+tipcorrs <- cov2cor(tipcovs)
+#
+# 
+# If you do any plotting, it should be of tip values for one
+# coordinate against tip values for another (i.e. one variable against
+# another).  Or contrasts for one coordinate against contrasts for
+# another.  Do NOT plot covariances against each other -- that way
+# lies madness.
+# 
+# 
+# Here is a question we can ask for simulation replicates but not for
+# real data:  So, what is the truth?
+# Answer:   Each coordinate underwent independent Brownian
+# motion along the tree, except that coordinates 1, 3, 19 (variables V2, V4,
+# and V20) also changed in a perfectly correlated Brownian motion that was
+# somewhat larger, so that the nose evolved forward and backward,
+# and in a second, independent set of correlated changes the dorsal fin
+# went up and down (coordinate 7, variable V8) and the tip of the tail
+# (coordinates 13 and 14 which are variables V14 and V15) changed in another
+# Brownian motion, so that the top of the tail changed out and in along a
+# line at a 45 degree angle..  There were also size changes which we hope the size
+# correction has reduced in influence.
+# 
+# 
+#    (For morphometrics data only)  Plotting the forms and PCs
+#
+# I have also included two R functions to plot the mean form of a dataset
+# as a gray outline, and on it place red arrows showing the direction and
+# magnitude of change for the two coordinates of each point in a
+# principal component.
+#
+# These plotting functions and some functions they use are in file
+# called    plotforms.R   which you can load into your R environment
+# with this command
+#
+# source("plotmeans.R")
+#
+# The plotting functions to use
+# are:
+#     plotmeansandpc(datafile, pc)
+# and
+#     plotmeansandpcmed(datafile, pc)
+#
+# where the first argument (a) is a data set (say  datacoords) and the second
+# is one of the eigenvectors of the principal components, such as 
+#
+pc <- contrastsPC1
+
+plotmeansandpc(datacoords,pc)
+#
+#  or
+#
+pc <- tipsPC1
+plotmeansandpc(datacoords,pc)
+#
+# The second function,  plotmeansandpcmed   has the principal components
+# adjusted to be sparser (this will be described in the lecture on
+# morphometrics).
+#
+```
+
+```{r exercise 3.2 BM}
+# R exercise for Wed June 12th Quantitative Genetics workshop 2019
+# Samantha Price 
+
+# Section 1 covers basic Brownian motion on a phylogeny
+# Section 2 covers changes in Brownian motion rate on a phylogeny 
+## Part A changes over time - using PIC and model fitting 
+## Part B changes over branches using model fitting
+
+library(ape)
+library(phytools)
+library(geiger)
+library(OUwie)
+
+# For section 2 you will need the dataset of cetacean body mass and female length at sexual maturity in CetaceaLH.txt and the tree CetaceaPhy.nex
+
+#==============SECTION 1 Brownian motion (BM) on a phylogeny============== 
+
+# What is Brownian motion?  At each instant in time the state of a character can increase or decrease and the direction and magnitude of these changes are independent of current or past states (no trends etc.).  The total displacement of a character after time t is drawn from a normal distribtion with a mean of zero (i.e. net change in trait is 0) and a variance proportional to t. 
+
+# Generate a basic 3 species tree using the ape read.tree function but you are giving it a newick string directly as text rather than a file
+
+tree<-read.tree(text="((grizzlybear:1, polarbear:1):4, spectacledbear:5);")
+plot(tree)
+axisPhylo() # this plots an axis on the Phylogeny
+nodelabels() # this plots the nodelabels, it tells you how ape labels the nodes
+
+# Looking at this tree we see that grizzly bears and polar bears share about 4 million years of history during which they all follow the same BM trajectory after which grizzly and polar bears split with both lineages starting on a new BM trajectory - we can simulate this. We need the branch length information: the longer the branch the greater the expected variance - with this we determine the standard deviation of the normal distribution. The total displacement of a character after time v is drawn from a normal distribtion with a mean of zero (i.e. net change in trait is 0) and a standard deviation = sqrt(rate*branchlength). 
+
+# Lets assume we have a root state of 1 and a sigma^2 of 0.5 
+
+# Start with the first branch from the root node 4 to 5 and estimate the trait value at node 5 and use the branch lengths to estimate the displacement.
+
+x<-rnorm(1, mean=0, sd=sqrt(0.5*tree$edge.length[1]))
+
+# You obviously need to convert this displacement to a trajectory, so if the root state is 1 then you add the displacement to the root state to get the value at the node.
+
+node5est<-1+x
+
+# You then repeat this process across the tree calculating the displacement with sqrt(0.5*tree$edge.length[i]) and adding it to the ancestral node. Fortunately you don't need to be able to do this as there are many R functions that will do it for you, such as fastBM in phytools.
+
+# We will now use simulations to explore the stochastic nature of the BM process and how differences in rate influence tip variance - feel free to use whatever methods you are familiar with but this exercise will use the phytools and the function phenogram to visualize the variance and the function fastBM to simulate traits with different rates of BM. 
+
+# First simulate a phylogeny, my example will use 30 species birth rate of 1 and death rate of 0.02 stopping at 30 taxa using the rphylo function in ape
+
+simtr<-rphylo(30, b=1, d=0.02, fossils=FALSE)
+
+# Now simulate 4 traits with two different rate categories, feel free to pick your own, this example we will use BM rate = 1 and BM rate = 2. FastBM generates a matrix with nrows=number of tips and ncols=nsim
+
+bm1sim<-fastBM(simtr, sig2=1, nsim=4)
+
+bm2sim<-fastBM(simtr, sig2=2, nsim=4)
+
+
+# Now visualize the trait evolution using phenograms which plots a projection of the phylogenetic tree in a space defined by phenotype on the y axis and time on the x axis.
+
+par(mfrow=c(2,4))
+for(i in 1:4) {phenogram(simtr, x= bm1sim[,i], col="grey")} # this short loop just saves us from manually running the phenogram function x4 on each of the different simulations
+for(i in 1:4) {phenogram(simtr, x= bm2sim[,i], col="blue")}
+
+# How does the variation within a rate category compare to between the two rate categories?
+# Do you think you would be able to distinguish if a trait has evolved at with a rate of 1 or 2 on this phylogeny? Does your neighbour come to the same conclusion?
+
+#==============SECTION 2 part A Changes in BM rate over time ============== 
+
+cetphy<-read.nexus("data/CetaceaPhy.nex") # Cetacean phylogeny 
+
+cetdat<-read.table("data/CetaceaLH.txt", header=T) #Cetacean life history data
+
+tmp<-treedata(cetphy, cetdat, sort=T) # useful function in geiger that creates an object with the overlapping taxa in the tree and the dataset
+
+tr<-tmp[[1]]
+dat<-tmp[[2]]
+
+# We will first use the node height test on independent contrasts to determine if the rate of Female length at sexual maturity is speeding up or slowing down over time 
+
+# First estimate the log of mass which is in the first column,
+
+logflsm<-log10(dat[,2])
+
+# Then calculate the node height, you could do this in several steps, using the pic function in ape and then fitting a linear model on the absolute value of the contrasts calculated and height above the root of the node at which they were being compared but there is a function in geiger: nh.test that does it all for you
+
+logflsmNH<-nh.test(tr, logflsm, regression.type="lm", show.plot=TRUE) # the other option is a robust regression, which can be very useful see Slater & Pennell 2013 syst. biol.
+
+# Why does Brownian motion specifically predict that the absolute value of the standardize contrast should not be related to age? So what does it mean if the absolute contrasts of Female length at sexual maturity are higher closer to the root? 
+
+# We will now use model-fitting to determine if Female length at sexual maturity is best fit by a Brownian motion model, a model that allows the rate to speed up or slow down over time or a non-phylogenetic white noise model that assumes a single normal distribution of the data with no phylogenetic covariance amongst specie. We will use the fitContinuous function in geiger for these models and AIC to identify the best-fitting model (problems with AIC are likely to be discussed later). When using the Akaike Information Criterion (corrected for small sample size AICc) the rule of thumb is a difference between the best fitting model (the lowest AICc score) which is referred to as the deltaAIc of 2 or more suggest some support for one model over another and >10 is substantial support. 
+
+logflsmBM<-fitContinuous(tr, logflsm, model="BM")
+logflsmWN<-fitContinuous(tr, logflsm, model="white")
+logflsmACDC<-fitContinuous(tr, logflsm, model="EB", bounds=list(a=c(-5,5))) # the defaults fix it to only allow an early burst model with decelerating rates (max of the a rate parameter is -0.0000001). So if you want to also fit a late burst model with accelerating rates you have to change the bounds to allow positive numbers.  
+
+logflsmBM$opt$aicc
+logflsmWN$opt$aicc
+logflsmACDC$opt$aicc
+
+# How can you interpret these results? Think about how the models are related to one another and look at the various parameter estimates by 
+logflsmBM$opt
+logflsmWN$opt
+logflsmACDC$opt
+
+# As clearly noted in the help manual for fitContinuous you need to be aware that the difficulty in finding the optimal solution is determined by an interaction between the nature and complexity of the likelihood space (which is data- and model-dependent) and the numerical optimizer used to explore the space. There is never a guarantee that the optimal solution is found, but using many random starting points (control$niter) and many optimization methods (control$method) will increase these odds."
+
+# Do the conclusions drawn from the contrasts and model-fitting approaches agree?
+
+#==============SECTION 2 part b Changes in BM rate over branches ============== 
+# For this section we are going to answer the question of whether dolphins, family Delphinidae have different rates of body size evolution compared to all other cetaceans. First by comparing absolute values of the standardized contrasts within delphinidae (74-95)to all others(1-73 excluding 68 which is the contrast between Delphinidae and other cetaceans)  statistically using the Mann-Whitney U
+
+logmass<-log10(dat[,1])
+
+logmasspic<-pic(logmass, tr, scaled=T, var.contrasts=TRUE)
+
+contrasts4test<-data.frame(abs(logmasspic[,1])[-20]) # this takes the absolute value of the contrasts and removes node 68, which is the contrast between Delphinidae and the other cetaceans. 
+contrasts4test$fam<-c(rep(1, 24), rep(2, 22)) # this identifies which contrasts belong to the Delphinidae =2 and the other families = 1, you can identify the relevant nodesusing many different ways but for a fairly small dataset one way is simply to look at the nodelabels (using nodelabels()) after you have plotted the tree) and identify the contrasts for your clade of interest.
+
+boxplot(contrasts4test[,1]~contrasts4test[,2], col=c("darkgrey", "purple"))
+
+wilcox.test(contrasts4test[,1]~contrasts4test[,2]) # this runs the Mann-Whitney U 
+
+# Now we can answer the question by fitting a single-rate of Brownian motion model and comparing it to a two-rate Brownian motion model using the R package OUwie
+
+logmassOUwie<-data.frame(row.names(dat), c(rep(1, 25), rep(2, 23)), log10(dat[,1])) # this sets up a dataset with species rames in the first column, in the second column it identifes the division of the taxa into the different rate categories so in this case it is the identifing all non-delphinid cetaceans as 1 and dolphins as 2, and in the third column we have log10 body mass
+
+logmassBM1<-OUwie(tr, logmassOUwie, model="BM1", simmap.tree=FALSE,  clade=c("Orcinus_orca", "Delphinus_delphis"), diagn=TRUE) #the clade option gives a pair of taxa whose MRCA is the clade of interest, which in this case is Delphinidae, this won't actually matter when model = BM1!
+logmassBM1
+
+logmassBMS<-OUwie(tr, logmassOUwie, model=c("BMS"), simmap.tree=FALSE, clade=c("Orcinus_orca", "Delphinus_delphis"), diagn=TRUE) #note root.station=FALSE this stops different different means being estimated for two clades and instead just estimates one at the root
+logmassBMS
+
+#What conclusions do you draw and do the results from the PICs and model-fitting agree?
+
+# It is useful to look at the approximate standard errors of sigma^2 (which are calculated from the Hessian matrix)
+
+logmassBMS$solution.se
+logmassBM1$solution.se
+
+# Is there are better way of checking the results and the influence of the likelihood surface on the parameter estimates? Yes! it is PARAMETRIC BOOTSTRAPPING! OUwie now has a built in function to run this for you.... this will be covered in later sections. 
+
+
+```
+
+## Lecture/Exercise 3.3: OU processes on phylogenies and their interpretation (Marguerite Butler and Brian O'Meara)
+Relationship btw statistics and phylogenetics
+- believe your data! believe what you measured over the weird contortions
+- statistics still holds, we aren't doing magical different statistics for phylogenetics
+
+Explanatory variables: want to test
+- other traits
+- environment
+- assoc. factors
+
+Evolutionary process models:
+- BM: stochastic
+- OU: stochastic and deterministic components
+
+Statistical methods:
+- ANOVA: testing if have two groups
+- Regression: finding line that best fits data and finding the minimum sum squared deviations
+- Correlation: like regression but minimize diagonal deviation
+
+Think of phylogenetic analyses as transformations of your measured data due to phylogenies.
+
+So which model should you use?
+
+$Z=V^{-1/2}_{BM}X$ Corrects for expected phylogenetic covariance (due only to shared history)
+
+This is basically contrasts.
+
+BM proportional to shared ancestry, OU proportional to shared ancestry plus a selection factor.
+
+Terminology is important:
+- what statisticians call "correlated errors" evolutionary biologists call "phylogenetic covariance"
+- "white noise" or "drunken walk" is called "drift"
+- $\alpha$: "drift" is called "selection" 
+- $\sigma$ is called teh "rate of evolution"
+
+Underlying most methods is a model of BM. 
+
+Contrasts:
+- data transform to remove phylogenetic covariance
+- conversion between measurements and differences
+
+PGLS:
+- regression models assuming phylogenetic covariance
+- typically uses a BM model
+- $Y = X+E\sim (V_{BM}+V_{err})$ or $Y = int + \beta_1X_1+\beta_2X_2+...$ for either BM or OU models
+
+Tools:
+- SLOUCH: model comparison in regression framework
+- OUCH: model comparison to fit data to BM or OU (multiple optima)
+- Brownie: model comparison fitting BM models or multiple rates of BM
+- OUwie: model comparsion to fit data to BM or OU with multiple $\alpha$ and/or multiple $\sigma$
+
+```{r exercise 3.3}
+steps <- 100
+x <- c(0:(steps-1))
+y <- c(0:steps)
+devs <- rnorm(length(x)) # default is centered at 0 with deviance of 1
+i<-1
+for (i in 1:length(x)){
+  
+  x[i+1]<-x[i]+devs[i]
+}
+
+plot(1:length(x),x,type="l")
+plot(1:length(devs),devs,type="l")
+```
+
+```{r exercise 3.3 BM-function}
+bmsim <- function(sigma=1,nlineages=1,nsteps=100,yylim=c(-60,60)){
+  plot(1:length(devs), 
+       devs,
+       type = "n",
+       col="red",
+       ylim = yylim,
+       xlab="Time",
+       ylab="Value",
+       main="BM Simulation")
+
+  for (j in 1:nlineages){
+    x <- c(0:(nsteps-1))
+    devs <- rnorm(nsteps)
+    for (i in 1:length(x)){
+      x[i+1] <- x[i]+sigma*devs[i]
+    }
+    lines(1:length(x),x,type="l")
+  }
+}
+
+bmsim(nsteps=200,nlineages=10,sigma=2)
+```
+
+```{r exercise 3.3 ou sim function}
+ousim <- function(sigma=1,alpha=0.1,theta=20,nlineages=1,nsteps=100,yylim=c(-60,60)){
+  plot(1:length(devs), 
+       devs,
+       type = "n",
+       col="red",
+       ylim = yylim,
+       xlab="Time",
+       ylab="Value",
+       main="OU Simulation")
+
+  for (j in 1:nlineages){
+    x <- c(0:(nsteps-1))
+    devs <- rnorm(nsteps)
+    for (i in 1:length(x)){
+      x[i+1] <- alpha*(theta-x[i])+sigma*devs[i]
+    }
+    lines(1:length(x),x,type="l")
+  }
+}
+
+ousim(nsteps=100,nlineages=5,sigma=2,alpha=0.1,theta=20,yylim=c(-20,20))
+```
+
+OU:
+
+$dX_T=\sigma *dW_T+\alpha(\theta-X_T)$
+
+$dX_T$ change for a time step
+
+$dW_T$ is the wiggle
+
+$\sigma$ is the rate of wiggle (Brownian rate)
+
+$\theta$ is the optimum value
+
+$X_T$ is the current position
+
+$\alpha$ slows the movement to the optimum, a rubber band, the phylogenetic half-life if you do: tree height scaling * ln(2)/$\alpha$
+
+BM has no $\theta$ and $\alpha=0$ 
+
+How do you pick the best model?
+- AIC: difference between the model and the truth
+   - doesn't measure the distance from the truth, just which model is closest
+- use weighted average of the models
+- don't just look at the model evaluation, look at the parameters and see if they make sense
+
+Type I error: incorrectly accept that there is a wolf (reject a true null)
+
+Type II error: incorrectly deny that there is a wolf (accept a false null)
+
+Type ??? error: incorrectly identify what is killing the wolf
+
+None of these models are the right model! obviously
+
+AIC:
+
+- $\Delta$AIC 0-2: substantial support
+- $\Delta$AIC 4-7: less support
+- $\Delta$AIC >10: no support
+
+but it's not a sig measure
+
+best model isn't always the true model
+
+the true model isn't necessarily in the set of models (our field it NEVER is)
+
+```{r exercise 3.3 ouwie}
+#Here is a basic exercise for OUwie, along with more advanced topics
+#Brian O'Meara, June 12, 2019
+require('OUwie')
+
+#?OUwie #gives help on OUwie
+
+data(tworegime) #a sample dataset included with OUwie. It's made up data but runs well for examples
+
+ls() #what does that dataset have in it?
+
+print(tree) #prints a summary of the tree object
+
+#Notice it has node labels. This is how regimes are mapped onto the tree. 
+
+print(trait) #prints what the trait object is.
+
+#But is it a matrix, a list, a data.frame, what? Two ways to look at this:
+class(trait) #just tells what the class is
+dput(trait) #prints the internal structure of the object. Can be handy with debugging
+
+
+
+
+
+
+
+
+#Plot the tree and the internal nodes to highlight the selective regimes:
+select.reg<-character(length(tree$node.label)) 
+select.reg[tree$node.label == 1] <- "black"
+select.reg[tree$node.label == 2] <- "red"
+plot(tree) 
+nodelabels(pch=21, bg=select.reg)
+
+
+
+
+
+
+
+
+#Now to run it!
+#This takes longer than you may be used to. 
+#We're a bit obsessive about doing multiple starts and in general
+#performing a thorough numerical search. It took you 3+ years
+#to get the data, may as well take an extra five minutes to 
+#get an accurate answer
+nodeBased.OUMV <- OUwie(tree,trait,model="OUMV", simmap.tree=FALSE, diagn=FALSE)
+print(nodeBased.OUMV)
+#What do the numbers mean?
+
+
+
+
+
+
+
+
+
+#Let's try a few other models, too
+#The models are "BM1","BMS","OU1","OUM","OUMV","OUMA","OUMVA" (and you've already done "OUMV")
+
+#Start with BM1 and OU1 (YOU figure out how to do this). What do these models mean? What are their results?
+
+
+
+
+
+
+
+
+
+
+
+
+
+#Now let's go over all the models. What does BMS mean?
+
+#This is an easier way to write what you were doing. A faster way to analyze it would be to use mclapply rather than lapply (see the parallel package)
+OUwie.model<-function(model, phy, data) {
+	print(paste("Now starting model",model))
+	return(OUwie(phy, data, model, simmap.tree=FALSE, diagn=FALSE))	
+}
+models <- c("BM1","BMS","OU1","OUM","OUMV","OUMA","OUMVA")
+results <- lapply(models, OUwie.model, phy=tree, data=trait)
+
+
+
+
+
+
+
+
+
+
+#Get the AICc values, put in a vector
+AICc.values<-sapply(results, "[[", "AICc")
+names(AICc.values)<-models
+AICc.values<-AICc.values-min(AICc.values)
+
+
+print(AICc.values) #The best model is the one with smallest AICc score
+
+best<-results[[which.min(AICc.values)]] #store for later
+
+print(best) #prints info on best model
+
+
+
+
+
+
+
+
+
+
+
+#We get SE for the optima (see nodeBased.OUMV$theta) but not for the other parameters. Let's see how hard they are to estimate. 
+#First, look at ?OUwie.fixed to see how to calculate likelihood at a single point.
+#?OUwie.fixed
+
+#Next, keep all parameters but alpha at their maximum likelihood estimates (better would be to fix just alpha and let the others optimize given this constraint, but this is harder to program for this class). Try a range of alpha values and plot the likelihood against this.
+alpha.values<-seq(from= 0 , to= 1 , length.out=50)
+#stop("replace the ??? and delete this stop")
+
+#keep it simple (and slow) and do a for loop:
+likelihood.values <- rep(NA, length(alpha.values))
+for (iteration in sequence(length(alpha.values))) {
+	likelihood.values[iteration] <- OUwie.fixed(tree, trait, model="OUMV", alpha=rep(alpha.values[iteration],2), sigma.sq=best$solution[2,], theta=best$theta[,1])$loglik
+}
+
+plot(x= alpha.values , y= likelihood.values, xlab="Alpha", ylab="Likelihood", type="l", bty="n")
+#stop("replace the ??? and delete this stop")
+
+
+points(x=best$solution[1,1], y=best$loglik, pch=16, col="red")
+text(x=best$solution[1,1], y=best$loglik, "unconstrained best", pos=4, col="red")
+
+#a rule of thumb for confidence for likelihood is all points two log likelihood units worse than the best value. Draw a dotted line on the plot to show this
+abline(h=max(likelihood.values)-2, lty="dotted") #Two log-likelihood 
+#stop("replace the ??? and delete this stop")
+
+
+#Now, let's try looking at both theta parameters at once, keeping the other parameters at their MLEs
+require("akima")
+
+nreps<-400
+theta1.points<-c(best$theta[1,1], rnorm(nreps-1, best$theta[1,1], 5*best$theta[1,2])) #center on optimal value, have extra variance
+theta2.points<-c(best$theta[2,1], rnorm(nreps-1, best$theta[2,1], 5*best$theta[2,2])) #center on optimal value, have extra variance
+likelihood.values<-rep(NA,nreps)
+
+for (iteration in sequence(nreps)) {
+	likelihood.values[iteration] <- OUwie.fixed(tree, trait, model="OUMV", alpha=best$solution[1,], sigma.sq=best$solution[2,], theta=c(theta1.points[iteration], theta2.points[iteration]))$loglik
+}
+#think of how long that took to do 400 iterations. Now remember how long the search took (longer).
+
+likelihood.differences<-(-(likelihood.values-max(likelihood.values)))
+
+#We are interpolating here: contour wants a nice grid. But by centering our simulations on the MLE values, we made sure to sample most thoroughly there
+interpolated.points<-interp(x=theta1.points, y=theta2.points, z= likelihood.differences, linear=FALSE, extrap=TRUE, xo=seq(min(theta1.points), max(theta1.points), length = 400), yo=seq(min(theta2.points), max(theta2.points), length = 400))
+	
+contour(interpolated.points, xlim=range(c(theta1.points, theta2.points)),ylim=range(c(theta1.points, theta2.points)), xlab="Theta 1", ylab="Theta 2", levels=c(2,5,10),add=FALSE,lwd=1, bty="n", asp=1)
+
+points(x=best$theta[1,1], y=best$theta[2,1], col="red", pch=16)
+
+points(x=trait$X[which(trait$Reg==1)],y=rep(min(c(theta1.points, theta2.points)), length(which(trait$Reg==1))), pch=18, col=rgb(0,0,0,.3)) #the tip values in regime 1, plotted along x axis
+points(y=trait$X[which(trait$Reg==2)],x=rep(min(c(theta1.points, theta2.points)), length(which(trait$Reg==2))), pch=18, col=rgb(0,0,0,.3)) #the tip values in regime 2, plotted along y axis
+
+
+#The below only works if the discrete trait rate is low, so you have a good chance of estimating where the state is.
+#If it evolves quickly, hard to estimate where the regimes are, so some in regime 1 are incorrectly mapped in
+#regime 2 vice versa. This makes the models more similar than they should be.
+#See Revell 2013, DOI:10.1093/sysbio/sys084 for an exploration of this effect.
+library(phytools)
+trait.ordered<-data.frame(trait[,2], trait[,2],row.names=trait[,1])
+trait.ordered<- trait.ordered[tree$tip.label,]
+z<-trait.ordered[,1]
+names(z)<-rownames(trait.ordered)
+tree.mapped<-make.simmap(tree,z,model="ER",nsim=1)
+leg<-c("black","red")
+names(leg)<-c(1,2)
+plotSimmap(tree.mapped,leg,pts=FALSE,ftype="off", lwd=1)
+
+simmapBased<-OUwie(tree.mapped,trait,model="OUMV", simmap.tree=TRUE, diagn=FALSE)
+print(simmapBased)
+#How does this compare to our best model from above? Should they be directly comparable?
+print(best)
+
+
+#Now let's try simulating
+data(sim.ex)
+
+#Simulate an Ornstein-Uhlenbeck model with different state means
+#and sigma^2 per selective regime, but same alpha
+alpha=c(1.0, 1.0)
+sigma.sq=c(0.45,0.9)
+theta0=1.0
+theta=c(1.0,2.0)
+stop("maybe you want to change some of these values?")
+
+sim.data<-OUwie.sim(tree,trait,simmap.tree=FALSE,scaleHeight=FALSE,
+alpha=alpha,sigma.sq=sigma.sq,theta0=theta0,theta=theta)
+
+sim.results <- OUwie(tree, sim.data, model="OUMV")
+
+#compare true values to estimated:
+comparison <- data.frame(true=c(alpha, sigma.sq, theta), est=c(sim.results$solution[1,], sim.results$solution[2,], sim.results$theta[,1]))
+rownames(comparison) <- c("alpha1", "alpha2", "sigma.sq1", "sigma.sq2", "theta1", "theta2")
+print(comparison)
+
+#we can repeat this a few times 
+nreps=5
+all.results <- matrix(nrow=6, ncol=nreps)
+for (rep.index in sequence(nreps)) {
+	sim.data<-OUwie.sim(tree,trait,simmap.tree=FALSE,scaleHeight=FALSE,alpha=alpha,sigma.sq=sigma.sq,theta0=theta0,theta=theta)
+		sim.results <- OUwie(tree, sim.data, model="OUMV")
+		all.results[,rep.index] <- c(sim.results$solution[1,], sim.results$solution[2,], sim.results$theta[,1])
+}
+all.results <- cbind(comparison, all.results)
+colnames(all.results) <- c("true", paste("sim", sequence(nreps+1), sep="_"))
+print(all.results)
+
+stop("What do these results mean?")
+```
+
+# Thursday June 13 2019
+## Lecture 4.1: The macroevolutionary dynamics of adaptive landscapes (Josef Uyeda)
+Does microevolution even matter for long-term change?
+
+## Lecture 4.2: Morphometrics and phylogenies (Joe Felsenstein)
+
+
+
+## Lecture 4.3: Usefulness of Brownian or OU simulation (Sam Price)
+Use simulations to build your intuition and test your theories!
+
+```{r exercise 4.3 simulation q 5}
+simtree <- rphylo(n=100,birth=0.5,death=0.1,T0=50)
+plot(simtree)
+
+#model <- OUwie.sim(phy=simtree,simmap.tree = TRUE,)
+```
+
+
+## Lecture 4.4: Accounting for sexual radiation with coevolutionary models & OUwie (Steve Arnold)
+
+
+
+## Lecture 4.5: Measurement error, identifiability, and model adequacy (Brian O'Meara)
+
+```{r exercise 4.5 dice models}
+observations <- c(1,1,2,1,2,1,2,2,1,3,1,3,1,2,1)
+
+dice3<-c(1,2,3)
+dice6<-c(1,2,3,4,5,6)
+dice8<-c(1,2,3,4,5,6,7,8)
+
+roll6<-list()
+for(i in 1:10){ # I broke it?
+  roll6[i]<-sample(x=dice6,size=15,replace = TRUE)
+}
+
+```
+
+## Lecture 4.6: Making sense of your output: assessing confidence in model selection and parameters (Marguerite Butler)
+BM and OU models make different predictions
+
+all comparative analyses are constructed in 3 pieces:
+- the comparative dataset: body size, plumage etc for each species
+- a particular pattern of shared ancestry: phylogeny and branch lengths
+- model of evolutionary change along each branch of the phylogeny
+    - but you could also change the model of evolution
+    
+
+```{r exercise 4.6}
+require(ouch)
+require(ggplot2)
+data(bimac)
+bimac
+
+rownames(bimac) <- bimac$node
+
+tree <- with( bimac, ouchtree(node, ancestor, time=time/max(time), species))
+
+plot(tree)
+
+plot(tree, regimes=bimac[c("OU.1", "OU.3", "OU.4", "OU.LP")], lwd=3)
+
+size <- log(bimac$size) 
+names(size) <- bimac$node
+
+h1 <- brown( size, tree) # BM
+h2 <- hansen( size, tree, regimes=bimac['OU.1'], sqrt.alpha=1, sigma=1)
+h3 <- hansen( size, tree, regimes=bimac['OU.3'], sqrt.alpha=1, sigma=1)
+h4 <- hansen( size, tree, regimes=bimac['OU.4'], sqrt.alpha=1, sigma=1)
+h5 <- hansen( size, tree, regimes=bimac['OU.LP'], sqrt.alpha=1, sigma=1)
+
+coef(h5)
+unlist( summary(h5)[c("aic", "aic.c", "sic", "dof")])
+
+h <- list(h1, h2, h3, h4, h5)
+names(h) <- c("BM", "OU.1", "OU.3", "OU.4", "OU.LP")
+
+h.ic <- sapply( h, function(x) unlist( summary(x)[c("aic", "aic.c", "sic", "dof")]))
+print( h.ic, digits = 3)
+
+
+#####  Parametric Bootstrap Resamples from the Best-Fit model 
+
+h5.sim <- simulate( object=h5, nsim=10)        # simulations
+summary(update( object = h5, data= h5.sim[[1]]))   # refit the model to simulated dataset 1
+h5.sim.fit <- lapply( h5.sim, function(x) update(h5, x))  # refit all simulated datasets to best fit model
+
+bootstrap ( object = h5, nboot=10)   ## automatically calculate bootstrap resamples
+
+#####  Bootstrap Resampling on Model Selection  a la Boettinger et al
+##  Have to fit all models (best plus alternatives) on each simulation
+##  
+
+## BM simulations, fit BM and OULP models
+
+bmsims <- simulate(h$BM, nsim=100)    # for publication you want ~2000
+
+bm.fit<-lapply(bmsims, function(x) update(h$BM, data=x))
+bm_bm_aic<-sapply(bm.fit, function(x) summary(x)$aic)
+
+ou.fit <-lapply(bmsims, function(x) update(h$OU.LP, data=x)) 
+bm_ou_aic<-sapply(ou.fit, function(x) summary(x)$aic)
+
+
+## OU simulations, fit BM and OULP models
+
+ousims <- simulate(h$OU.LP, nsim=100)
+
+bm.fit<-lapply(ousims, function(x) update(h$BM, data=x))
+ou_bm_aic<-sapply(bm.fit, function(x) summary(x)$aic)
+
+ou.fit <-lapply(ousims, function(x) update(h$OU.LP, data=x)) 
+ou_ou_aic<-sapply(ou.fit, function(x) summary(x)$aic)
+
+
+## AIC differences 
+
+bm.aic.diff <- bm_ou_aic-bm_bm_aic    # bm simulated, oufit - bmfit
+ou.aic.diff <- ou_ou_aic-ou_bm_aic    # ou simulated, oufit - bmfit
+
+bm.aic.diff <- data.frame(aic_diff = bm.aic.diff, genmodel="BM")
+ou.aic.diff <- data.frame(aic_diff = ou.aic.diff, genmodel="OU")
+obs.aic <- data.frame(aic=summary(h$OU.LP)$aic-summary(h$BM)$aic)
+
+## GG Plot
+ 
+aic.plot <- ggplot(rbind(bm.aic.diff, ou.aic.diff), aes(x=aic_diff))+ 
+	geom_density(aes(group=genmodel, fill=genmodel), alpha=.7) + 
+	scale_fill_grey() + 
+	theme_classic() +
+	geom_vline(data=obs.aic, aes(xintercept=aic), linetype=2) +
+	xlab(expression(AIC~'difference')) +
+	ylab('Density')
+
+aic.plot
+
+
+
+#####################
+
+plot(tree, node.names=T)
+ou.lp <- paint( tree, subtree=c("1"="medium","9"="large","2"="small") )
+plot(tree, regimes=ou.lp, node.names=T)
+
+ou.lp <- paint( tree, subtree=c("1"="medium","9"="large","2"="small"), branch=c("38"="large","2"="medium"))
+
+plot(tree, regimes=ou.lp, node.names=T)
+
+ou.clades <- paint( tree, subtree=c("1"="A","7"="B", "8"="C"), branch=c("8"="C", "7"="C", "1"="A"))
+plot(tree, regimes=ou.clades, node.names=T)
+
+h6 <- hansen(log(bimac['size']),tree, regimes=ou.clades,sqrt.alpha=1,sigma=1)
+h <- append(h, h6)         # append (add on) new model results to our list h
+names(h)[length(h)] <- "OU.clades"    # add the name of the new model
+names(h)
+h.ic <- sapply( h, function(x) unlist(summary(x)[c('aic', 'aic.c', 'sic', 'dof')]) ) 
+print( h.ic, digits = 3)
+
+
+
+```
+
+
+# Friday June 14 2019
+## Lecture 5.1: Phylogenetic natural history: data-driven and hypothesis-driven frameworks (Josef Uyeda)
+The standard caveats:
+- correlation is not causation
+- phylogeny introduces statistical non-independence
+
+But there are concerns in the field that move beyond these:
+- hard to understand significance of phylogenetic correlation tests for categorical characters
+    - Uyeda says this goes beyond categorical characters
+- model inadequacies and mistaken inferences for trait-dependent speciation models
+
+Rare singular events break everything:
+- Felsenstein's worst case scenario
+- models of adaptation
+- discrete character correlations
+
+Felsenstein's worst case scenario:
+- can't do linear regression b/c: non-independence of phylogenies (NO!)
+- it's the non-independence of the residual error variation
+- but this can be an issue caused by a single major event which will mess with independent contrasts too (see Maddison-FitzJohn problem)
+- even worse: we aren't looking at all possible models, just BM
+
+Models of adaptation:
+- looking at relationship btw continuous and discrete trait
+- can find the model closest to the ocean, but still can't tell how far we are from the ocean
+- Uyeda working on methods that are data-driven (Bayou), other methods too: Medusa, surface, l1ou, phylogeneticEM, BAMM, auteur
+- hypothesis testing approach: best model may still be bad, tests biological predictors
+- phylogenetic natural history approach: finds major events, descriptive
+- both of these methods are useful, and complementary!
+
+Ascertainment bias: easy with one event, much harder with multiple events
+
+We need to think about causation better
+
+M. Butler: confounding discrete traits with continuous character evolution?
+
+## Lecture 5.2: Applying all this to your data (Uyeda, O'Meara, Butler, Price)
+### Simulation practice
+Can take a matrix of discrete traits being analyzed and smoosh into a univariate vector (trait 1 with states 0 and 1 and trait 2 with states a and b becomes 0a, 0b, 1a, 1b)
+
+Think about the figures that you would want to have at the end of the simulations.
+
+Start with a very coarse grid search for values. Latin hypercube sampling can let you generate random samples but while filling in.
+
+What is the final object coming out?
+
+Don't write the function to rule all functions. Document! Include the why!
+
+Modularity is great! Writing it as a package is a decent option.
+
+For continuous: do bounded OU simulations, use physical etc limits to apply bounds to the simulations occurring. Even better with multivariate bounded evolution.
+
+
+```{r exercise 5.2 simulation practice}
+
+
+```
+
+## Lecture 5.3: The threshold model (Felsenstein and Uyeda)
+
+
+
 # Other stuff
+Total aside of my brain: do people ever account for our understanding of how quickly relative fitness changes occur in experimental evolution when simulating in OU? Yes, see Hunt 2008 (evolution adaptive optimum stickleback)
+
+Can I run a simulation from GOE to modern with adaptive optima shifts (both optima and alpha) occurring at snowball earths, look for preservation of those signals?
+- think about how to test the extremes
+
+Bounded OU:
+- non-snowball: optima varies in 0-50 ppt salinity range, bounding from 0 to 400 ppt, alpha is low
+- snowball: optima is at 0, bounding is same, alpha is very very high
+- Snowballs at:
+    - Marinoan: 635-650 Mya
+    - Sturtian: 715-680 Mya
